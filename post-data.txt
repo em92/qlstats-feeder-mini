@@ -1,0 +1,40 @@
+S PredTestServer
+I random-match-id4
+G dm
+M longestyard
+R rev1
+D 300
+O baseq3
+U 27960
+V 12
+P 11111
+n PlayerA
+e matches 1
+e scoreboardvalid 1
+e alivetime 250
+e wins
+e rank 1
+e scoreboard-score 30
+e scoreboard-kills 30
+e scoreboard-deaths 20
+e scoreboard-suicides 0
+e acc-rg-cnt-fired 45
+e acc-rg-fired 3600
+e acc-rg-cnt-hit 30
+e acc-rg-hit 2400
+e acc-rg-frags 30
+P 22222
+n PlayerB
+e matches 1
+e scoreboardvalid 1
+e alivetime 200
+e rank 2
+e scoreboard-score 20
+e scoreboard-kills 20
+e scoreboard-deaths 30
+e scoreboard-suicides 2
+e acc-rg-cnt-fired 50
+e acc-rg-fired 4000
+e acc-rg-cnt-hit 20
+e acc-rg-hit 1600
+e acc-rg-frags 20
