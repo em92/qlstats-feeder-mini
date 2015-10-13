@@ -1,0 +1,12 @@
+{
+  "loader": {
+    "saveDownloadedJson": false,
+    "importDownloadedJson": true,
+    "ql_email": "horst.beham@gmx.at",
+    "ql_pass": "9526199rb",
+    "jsondir": "./ql-match-jsons/"
+  }
+}
+
+
+
