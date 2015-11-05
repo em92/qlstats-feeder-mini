@@ -9,6 +9,7 @@ var
   request = require("request"),
   log4js = require("log4js"),
   zlib = require("zlib"),
+  zmq = require("zmq"),
   Q = require("q");
 
 var __dirname; // current working directory (defined by node.js)
@@ -28,21 +29,57 @@ function main() {
     process.exit();
   }
   Q.longStackSupport = false;
-  fetchAndProcessJsonInfiniteLoop()
-    .fail(function(err) { _logger.error(err.stack); })
-    .done(function() {
-      _logger.info("completed");
-      process.exit();
-    });
+
+  connectToServerStatsZmq();
 }
 
 //==========================================================================================
 // QL stats data tracker
 //==========================================================================================
 
+function connectToServerStatsZmq() {
+  var regex = /^(?:[0-9]{1,3}\.){3}[0-9]{3}:[0-9]+$/;
+
+  for (var i = 0; i < _config.loader.servers.length; i++) {
+    var server = _config.loader.servers[i];
+    var match = regex.exec(server);
+    if (!match)
+      continue;
+
+    _logger.info("Connecting to " + server);
+
+    var sub = zmq.socket("sub");
+    sub.connect("tcp://" + server);
+    sub.subscribe("");
+
+    (function (sub, ip, port) {
+      var context = { ip: ip, port: port, playerStats: [] }
+      sub.on("message", function(data) { onZmqMessage(context, data) });
+    }) (sub, match[1], match[2]);
+  }
+}
+
+function onZmqMessage(context, data) {
+  var msg = data.toString();
+  _logger.debug("Received ZMQ message: " + msg);
+  var obj = JSON.parse(msg);
+  if (obj.TYPE == "PLAYER_STATS") {
+    context.playerStats.push(obj.DATA);
+  }
+  else if (obj.TYPE == "MATCH_REPORT") {
+    var stats = {
+      serverIp: context.ip,
+      serverPort: context.port,
+      gameEndTimestamp: new Date().getTime() / 1000,
+      matchStats: obj.DATA,
+      playerStats: context.playerStats
+    };
+    context.playerStats = [];
+    processMatch(stats);
+  }
+}
 
 function fetchAndProcessJsonInfiniteLoop() {
-  _logger.debug("Fetching data from stdin");
   return requestJson()
     .then(processMatch)
     .fail(function(err) { _logger.error("Error processing batch: " + err); });
@@ -58,7 +95,8 @@ function requestJson() {
   var matchStats = JSON.parse(fs.readFileSync(__dirname + "/sample-data/matchreport.json")).DATA;
 
   defer.resolve({
-    serverId: "127.0.0.1:27960",
+    serverIp: "127.0.0.1",
+    serverPort: 27960,
     gameEndTimestamp: new Date().getTime() / 1000,
     matchStats: matchStats,
     playerStats: playerStats
@@ -123,7 +161,7 @@ function processGame(game) {
   //saveGameJson(game);
 
   var data = [];
-  data.push("0 " + game.serverId); // not XonStat standard
+  data.push("0 " + game.serverIp); // not XonStat standard
   data.push("S " + game.matchStats.SERVER_TITLE);
   data.push("I " + game.matchStats.MATCH_GUID);
   data.push("G " + gt);
@@ -131,10 +169,10 @@ function processGame(game) {
   data.push("O baseq3");
   data.push("V 7"); // CA must be >= 6 
   data.push("R .1");
-  //data.push("U 27960"); // port
+  data.push("U " + game.serverPort);
   data.push("D " + game.matchStats.GAME_LENGTH);
 
-  var allWeapons = { gt: "GAUNTLET", mg: "MACHINEGUN", sg: "SHOTGUN", gl: "GRENADE", rl: "ROCKET", lg: "LIGHTNING", rg: "RAILGUN", pg: "PLASMA", bfg: "BFG", hmg: "HMG", cg: "CHAINGUN",  ng: "NAILGUN", pm: "PROXMINE", gh: };
+  var allWeapons = { gt: "GAUNTLET", mg: "MACHINEGUN", sg: "SHOTGUN", gl: "GRENADE", rl: "ROCKET", lg: "LIGHTNING", rg: "RAILGUN", pg: "PLASMA", bfg: "BFG", hmg: "HMG", cg: "CHAINGUN",  ng: "NAILGUN", pm: "PROXMINE", gh: "OTHER_WEAPON"};
   var usedWeapons = allWeapons;
   /*
   var usedWeapons = {};
@@ -166,7 +204,7 @@ function processGame(game) {
       uri: "http://localhost:6543/stats/submit",
       timeout: 10000,
       method: "POST",
-      headers: { "X-Forwarded-For": "0.0.0.0", "X-D0-Blind-Id-Detached-Signature": "dummy" },
+      headers: { /*"X-Forwarded-For": "0.0.0.0", */ "X-D0-Blind-Id-Detached-Signature": "dummy" },
       body: data.join("\n")
     },
     function(err) {
