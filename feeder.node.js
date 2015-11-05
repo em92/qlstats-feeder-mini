@@ -21,7 +21,7 @@ main();
 
 function main() {
   _logger = log4js.getLogger("ldtracker");
-  _logger.setLevel(log4js.levels.INFO);
+  _logger.setLevel(log4js.levels.DEBUG);
   var data = fs.readFileSync(__dirname + "/cfg.json");
   _config = JSON.parse(data);
   if (!(_config.loader.saveDownloadedJson || _config.loader.importDownloadedJson)) {
@@ -37,8 +37,24 @@ function main() {
 // QL stats data tracker
 //==========================================================================================
 
+function feedSampleData() {
+  var playerStats = [];
+  playerStats.push(JSON.parse(fs.readFileSync(__dirname + "/sample-data/playerstats1.json")).DATA);
+  playerStats.push(JSON.parse(fs.readFileSync(__dirname + "/sample-data/playerstats2.json")).DATA);
+  var matchStats = JSON.parse(fs.readFileSync(__dirname + "/sample-data/matchreport.json")).DATA;
+
+  var stats = {
+    serverIp: "127.0.0.1",
+    serverPort: 27960,
+    gameEndTimestamp: new Date().getTime() / 1000,
+    matchStats: matchStats,
+    playerStats: playerStats
+  }
+  processMatch(stats);
+}
+
 function connectToServerStatsZmq() {
-  var regex = /^(?:[0-9]{1,3}\.){3}[0-9]{3}:[0-9]+$/;
+  var regex = /^((?:[0-9]{1,3}\.){3}[0-9]{3}):([0-9]+)$/;
 
   for (var i = 0; i < _config.loader.servers.length; i++) {
     var server = _config.loader.servers[i];
@@ -53,7 +69,7 @@ function connectToServerStatsZmq() {
     sub.subscribe("");
 
     (function (sub, ip, port) {
-      var context = { ip: ip, port: port, playerStats: [] }
+      var context = { addr: ip + ":" + port, ip: ip, port: port, playerStats: [] }
       sub.on("message", function(data) { onZmqMessage(context, data) });
     }) (sub, match[1], match[2]);
   }
@@ -61,8 +77,8 @@ function connectToServerStatsZmq() {
 
 function onZmqMessage(context, data) {
   var msg = data.toString();
-  _logger.debug("Received ZMQ message: " + msg);
   var obj = JSON.parse(msg);
+  _logger.debug(context.addr + ": received ZMQ message: " + obj.TYPE);
   if (obj.TYPE == "PLAYER_STATS") {
     context.playerStats.push(obj.DATA);
   }
@@ -79,35 +95,11 @@ function onZmqMessage(context, data) {
   }
 }
 
-function fetchAndProcessJsonInfiniteLoop() {
-  return requestJson()
-    .then(processMatch)
-    .fail(function(err) { _logger.error("Error processing batch: " + err); });
-  //.then(sleepBetweenBatches)
-  //.then(fetchAndProcessJsonInfiniteLoop);
-}
-
-function requestJson() {
-  var defer = Q.defer();
-  var playerStats = [];
-  playerStats.push(JSON.parse(fs.readFileSync(__dirname + "/sample-data/playerstats1.json")).DATA);
-  playerStats.push(JSON.parse(fs.readFileSync(__dirname + "/sample-data/playerstats2.json")).DATA);
-  var matchStats = JSON.parse(fs.readFileSync(__dirname + "/sample-data/matchreport.json")).DATA;
-
-  defer.resolve({
-    serverIp: "127.0.0.1",
-    serverPort: 27960,
-    gameEndTimestamp: new Date().getTime() / 1000,
-    matchStats: matchStats,
-    playerStats: playerStats
-  });
-  return defer.promise;
-}
 
 function processMatch(stats) {
   var tasks = [];
   if (_config.loader.saveDownloadedJson)
-    tasks.push(saveGameJson(JSON.stringify(stats)));
+    tasks.push(saveGameJson(stats));
   if (_config.loader.importDownloadedJson)
     tasks.push(processGame(stats));
   return Q
@@ -117,13 +109,12 @@ function processMatch(stats) {
 
 
 function saveGameJson(game) {
-  // JSONs loaded from match profiles contain "mm/dd/yyyy h:MM a" format, live tracker contains unixtime int data
-  var GAME_TIMESTAMP = game.gameEndTimestamp; // can be either a number, an Object-number, a string, ... 
+  var GAME_TIMESTAMP = game.gameEndTimestamp;
   var basedir = _config.loader.jsondir;
   var date = new Date(GAME_TIMESTAMP * 1000);
   var dirName1 = basedir + date.getFullYear() + "-" + ("0" + (date.getMonth() + 1)).slice(-2);
   var dirName2 = dirName1 + "/" + ("0" + date.getDate()).slice(-2);
-  var filePath = dirName2 + "/" + game.PUBLIC_ID + ".json.gz";
+  var filePath = dirName2 + "/" + game.matchStats.MATCH_GUID + ".json.gz";
   _logger.debug("saving JSON: " + filePath);
   return createDir(dirName1)
     .then(createDir(dirName2))
