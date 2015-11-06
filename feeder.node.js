@@ -30,7 +30,12 @@ function main() {
   }
   Q.longStackSupport = false;
 
-  connectToServerStatsZmq();
+  if (process.argv.length > 2) {
+    for (var i = 2; i < process.argv.length; i++)
+      feedJsonFile(process.argv[i]);
+  }
+  else
+    connectToServerStatsZmq();
 }
 
 //==========================================================================================
@@ -53,8 +58,25 @@ function feedSampleData() {
   processMatch(stats);
 }
 
+function feedJsonFile(file) {
+  if (!file.match(/.json(.gz)?$/))
+    return;
+  var isGzip = file.slice(-3) == ".gz";
+  _logger.debug("Loading " + file);
+  var data = fs.readFileSync(file);
+  if (isGzip)
+    data = zlib.gunzipSync(data);
+
+  var game = JSON.parse(data);
+  if (game.matchStats.MATCH_GUID)
+    processGame(game);
+  else
+    _logger.warn(file + ": no MATCH_GUID in json data. File was ignored.");
+}
+
+
 function connectToServerStatsZmq() {
-  var regex = /^((?:[0-9]{1,3}\.){3}[0-9]{3}):([0-9]+)$/;
+  var regex = /^((?:[0-9]{1,3}\.){3}[0-9]{1,3}):([0-9]+)(?:\/(.+))?$/;
 
   for (var i = 0; i < _config.loader.servers.length; i++) {
     var server = _config.loader.servers[i];
@@ -65,6 +87,11 @@ function connectToServerStatsZmq() {
     _logger.info("Connecting to " + server);
 
     var sub = zmq.socket("sub");
+    if (match[3]) {
+      sub.sap_domain = "stats";
+      sub.plain_username = "stats";
+      sub.plain_password = match[3];
+    }
     sub.connect("tcp://" + server);
     sub.subscribe("");
 
@@ -79,8 +106,12 @@ function onZmqMessage(context, data) {
   var msg = data.toString();
   var obj = JSON.parse(msg);
   _logger.debug(context.addr + ": received ZMQ message: " + obj.TYPE);
-  if (obj.TYPE == "PLAYER_STATS") {
-    context.playerStats.push(obj.DATA);
+  if (obj.TYPE == "MATCH_STARTED") {
+    context.matchStarted = true;
+  }
+  else if (obj.TYPE == "PLAYER_STATS") {
+    if (context.matchStarted)
+      context.playerStats.push(obj.DATA);
   }
   else if (obj.TYPE == "MATCH_REPORT") {
     var stats = {
@@ -91,10 +122,12 @@ function onZmqMessage(context, data) {
       playerStats: context.playerStats
     };
     context.playerStats = [];
-    processMatch(stats);
+    if (context.matchStarted) {
+      context.matchStarted = false;
+      processMatch(stats);
+    }
   }
 }
-
 
 function processMatch(stats) {
   var tasks = [];
@@ -106,7 +139,6 @@ function processMatch(stats) {
     .allSettled(tasks)
     .catch(function(err) { _logger.error(err.stack); });
 }
-
 
 function saveGameJson(game) {
   var GAME_TIMESTAMP = game.gameEndTimestamp;
@@ -144,7 +176,7 @@ function processGame(game) {
   var defer = Q.defer();
 
   var gt = getGametype(game.matchStats.GAME_TYPE);
-  if (!gt || gt != "duel")
+  if (!gt)
     return false;
 
   //if (gt != "ca")
@@ -176,23 +208,23 @@ function processGame(game) {
   }
   */
   var ok;
-  //if (game.SCOREBOARD)
-  ok = exportScoreboard(game.playerStats, 0, true, usedWeapons, data);
+  if ("ffa,duel".indexOf(gt) >= 0)
+    ok = exportScoreboard(game.playerStats, 0, true, usedWeapons, data);
   //else if (game.RACE_SCOREBOARD)
   //  ok = exportScoreboard(game.RACE_SCOREBOARD, 0, true, usedWeapons, data);
-  //else if (game.RED_SCOREBOARD && game.BLUE_SCOREBOARD) {
-  //  var redWon = parseInt(game.TSCORE0) > parseInt(game.TSCORE1);
-  //  ok = exportTeamSummary(game.TEAM_SCOREBOARD[0], 1, data)
-  //  && exportScoreboard(game.RED_SCOREBOARD, 1, redWon, allWeapons, data)
-  //  && exportTeamSummary(game.TEAM_SCOREBOARD[1], 2, data)
-  //  && exportScoreboard(game.BLUE_SCOREBOARD, 2, !redWon, allWeapons, data);
-  //}
+  else if ("ca,tdm,ctf,ft".indexOf(gt) >= 0) {
+    var redWon = parseInt(game.matchStats.TSCORE0) > parseInt(game.matchStats.TSCORE1);
+    ok = exportTeamSummary(gt, game.matchStats, 1, data)
+    && exportScoreboard(game.playerStats, 1, redWon, allWeapons, data)
+    && exportTeamSummary(gt, game.matchStats, 2, data)
+    && exportScoreboard(game.playerStats, 2, !redWon, allWeapons, data);
+  }
 
   if (!ok)
     return false;
 
   request({
-      uri: "http://localhost:6543/stats/submit",
+      uri: "http://localhost:" + _config.loader.xonstatPort + "/stats/submit",
       timeout: 10000,
       method: "POST",
       headers: { /*"X-Forwarded-For": "0.0.0.0", */ "X-D0-Blind-Id-Detached-Signature": "dummy" },
@@ -242,6 +274,8 @@ function exportScoreboard(scoreboard, team, isWinnerTeam, weapons, data) {
   }
   for (var i = 0; i < scoreboard.length; i++) {
     var p = scoreboard[i];
+    if (p.TEAM != team)
+      continue;
     data.push("P " + p.STEAM_ID);
     data.push("n " + p.NAME);
     if (team)
@@ -272,9 +306,19 @@ function exportScoreboard(scoreboard, team, isWinnerTeam, weapons, data) {
   return true;
 }
 
-
-function exportTeamSummary(info, team, data) {
+function exportTeamSummary(gt, matchstats, team, data) {
   var mapping = { CAPTURES: "caps", SCORE: "score", ROUNDS_WON: "rounds" };
+  var score = matchstats["TSCORE" + (team - 1)];
+  var info = {};
+  if (gt == "ctf")
+    info.CAPTURES = score;
+  else if (gt == "tdm")
+    info.SCORE = score;
+  else if (gt == "ca" || gt == "ft")
+    info.ROUNDS_WON = score;
+  else
+    return false;
+
   data.push("Q team#" + team);
   mapFields(info, mapping, data);
   return true;
