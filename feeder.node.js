@@ -9,8 +9,8 @@
  When the submission.py server is not responding with an "ok",
  a .json.gz is saved in the <jsondir>/errors/ folder.
 
- TODO:
- - ability to add servers on-the-fly without restarting the feeder
+ The script monitors changes to the config file an automatically 
+ connects to added server and disconnects from removed servers.
 
 */
 
@@ -25,12 +25,13 @@ var
   zmq = require("zmq"),
   Q = require("q");
 
-var MonitorInterval = 60000; // check status of connections once per minute
+var MonitorInterval = 1000; // interval for checking connection status
 var IpPortPassRegex = /^((?:[0-9]{1,3}\.){3}[0-9]{1,3}):([0-9]+)(?:\/(.+))?$/;  // IP:port/pass
 
 var __dirname; // current working directory (defined by node.js)
 var _logger; // log4js logger
 var _config; // config data from cfg.json
+var _zmqConnections = {}; // dictionary with IP:port => zqm socket
 
 main();
 
@@ -48,9 +49,10 @@ function main() {
   if (process.argv.length > 2) {
     for (var i = 2; i < process.argv.length; i++)
       feedJsonFile(process.argv[i]);
+  } else {
+    connectToServerList(_config.loader.servers);
+    fs.watch(__dirname + "/cfg.json", reloadServerListFromChangedConfigFile);
   }
-  else
-    connectToServerList();
 }
 
 //==========================================================================================
@@ -73,21 +75,56 @@ function feedJsonFile(file) {
   processGame(game);
 }
 
-function connectToServerList() {
-  if (!_config.loader.servers.length) {
+function reloadServerListFromChangedConfigFile() {
+  try {
+    var cfg = JSON.parse(fs.readFileSync(__dirname + "/cfg.json"));
+    _config.loader.servers = cfg.loader.servers;
+    connectToServerList(cfg.loader.servers);
+  } catch (err) {
+    if (err.code != "EBUSY" && err.code != "ENOENT") {
+      _logger.error("Failed to reload the server list: " + err);
+    }
+  }
+}
+
+function connectToServerList(servers) {
+  if (!servers.length) {
     _logger.error("There are no servers configured in cfg.json.");
     return;
   }
 
-  for (var i = 0; i < _config.loader.servers.length; i++) {
-    var server = _config.loader.servers[i];
+  // create a new dictionary with the zmq connections for the new server list
+  var newZmqConnections = {};
+  for (var i = 0; i < servers.length; i++) {
+    var server = servers[i];
     var match = IpPortPassRegex.exec(server);
     if (!match) {
       _logger.warn(server + ": ignoring server (not IP:port[/password])");
       continue;
     }
-    connectToZmq(match[1], match[2], match[3]);
+
+    var ip = match[1];
+    var port = match[2];
+    var key = ip + ":" + port;
+    var sub = _zmqConnections[key];
+    if (sub)
+      delete _zmqConnections[key];
+    else
+      sub = connectToZmq(ip, port, match[3]);
+    newZmqConnections[key] = sub;
   }
+
+  // shut down connections to servers which are no longer in the config
+  for (var key in _zmqConnections) {
+    if (!_zmqConnections.hasOwnProperty(key)) continue;
+    var sub = _zmqConnections[key];
+    _logger.info(key + ": disconnected. Server was removed from config.");
+    try { sub.disconnect(); } catch (err) { }
+    try { sub.close(); } catch (err) { }
+    try { sub.unmonitor(); } catch (err) { }
+  }
+
+  _zmqConnections = newZmqConnections;
 }
 
 function connectToZmq(ip, port, pass) {
@@ -100,24 +137,23 @@ function connectToZmq(ip, port, pass) {
     sub.plain_password = pass;
   }
 
-  _logger.debug("Connecting to " + addr);
-  var showFailMsg = true;
+  _logger.debug(addr + ": trying to connect");
+  var failAttempt = 0;
   var context = { addr: addr, ip: ip, port: port, matchStarted: false, playerStats: [] }
   sub.on("message", function(data) { onZmqMessage(context, data) });
-  sub.on("connect", function () { _logger.info("Connected to " + addr); showFailMsg = true; });
+  sub.on("connect", function () { _logger.info(addr + ": connected successfully"); failAttempt = 0; });
   sub.on("connect_delay", function () {
-    if (showFailMsg) {
-      _logger.warn("Failed connecting to " + addr + ", but will keep trying...");
-      showFailMsg = false;
-    }
+    if (failAttempt++ == 1)
+      _logger.warn(addr + ": failed to connect, but will keep trying...");
   });
-  sub.on("connect_retry", function () { _logger.debug("Retrying connect to " + addr); });
-  sub.on("disconnect", function () { _logger.warn("Disconnected from " + addr); showFailMsg = false; });
-  sub.on("monitor_error", function() { _logger.error("Error monitoring " + addr); setTimeout(function() { sub.monitor(MonitorInterval, 0); }); });
+  sub.on("connect_retry", function () { if (failAttempt % 40 == 0) _logger.debug(addr + ": retrying to connect"); });
+  sub.on("disconnect", function () { _logger.warn(addr + ": disconnected"); failAttempt = 0; });
+  sub.on("monitor_error", function() { _logger.error(addr + ": error monitoring network status"); setTimeout(function() { sub.monitor(MonitorInterval, 0); }); });
 
   sub.monitor(MonitorInterval, 0);
   sub.connect("tcp://" + addr);
   sub.subscribe("");
+  return sub;
 }
 
 function onZmqMessage(context, data) {
@@ -142,10 +178,10 @@ function onZmqMessage(context, data) {
       playerStats: context.playerStats
     };
     context.playerStats = [];
-    if (context.matchStarted) {
-      context.matchStarted = false;
+    //if (context.matchStarted) {
+    //  context.matchStarted = false;
       processMatch(stats);
-    }
+    //}
   }
 }
 
@@ -194,7 +230,6 @@ function createDir(dir) {
 
 function processGame(game) {
   var defer = Q.defer();
-
   var gt = getGametype(game.matchStats.GAME_TYPE);
   if (",ffa,duel,ca,tdm,ctf,ft,".indexOf("," + gt + ",") < 0) {
     _logger.debug(game.serverIp + ":" + game.serverPort + ": unsupported game type: " + gt);
@@ -229,7 +264,7 @@ function processGame(game) {
   }
 
   if (!ok) {
-    _logger.warn(game.serverIp + ":" + game.serverPort + ": failed to generate data for " + game.matchStats.MATCH_GUID);
+    _logger.info(game.serverIp + ":" + game.serverPort + ": match doesn't meet requirements for stats tracking");
     return false;
   }
 
@@ -303,6 +338,7 @@ function exportScoreboard(scoreboard, team, isWinnerTeam, weapons, data) {
     mapFields(p.MEDALS, medalMapping, data);
 
     for (var w in weapons) {
+      if (!weapons.hasOwnProperty(key)) continue;
       var lname = weapons[w];
       var wstats = p.WEAPONS[lname];
       var kills = wstats && wstats.K;
@@ -336,6 +372,7 @@ function exportTeamSummary(gt, matchstats, team, data) {
 
 function mapFields(info, mapping, data) {
   for (var field in mapping) {
+    if (!mapping.hasOwnProperty(key)) continue;
     if (field in info)
       data.push("e scoreboard-" + mapping[field] + " " + info[field]);
   }

@@ -3,6 +3,7 @@
     "saveDownloadedJson": true,
     "importDownloadedJson": true,
     "jsondir": "./ql-match-jsons/",
+    "xonstatPort":  8080,
     "servers": [
       "46.101.227.252:27960",
       "46.101.227.252:27961",
