@@ -37,7 +37,6 @@ main();
 
 function main() {
   _logger = log4js.getLogger("feeder");
-  _logger.setLevel(log4js.levels.DEBUG);
   Q.longStackSupport = false; // enable if you have to trace a problem, but it has a HUGE performance penalty
 
   reloadConfig();
@@ -82,6 +81,7 @@ function reloadConfig() {
       _logger.error("At least one of loader.saveDownloadedJson or loader.importDownloadedJson must be set in cfg.json");
       process.exit();
     }
+    _logger.setLevel(_config.loader.logLevel || log4js.levels.INFO);
     _logger.info("Reloaded modified of cfg.json");
     return true;
   } catch (err) {
@@ -325,7 +325,7 @@ function exportScoreboard(scoreboard, team, isWinnerTeam, weapons, data) {
   }
   for (var i = 0; i < scoreboard.length; i++) {
     var p = scoreboard[i];
-    if (p.TEAM != team)
+    if ((team || p.TEAM) && p.TEAM != team)
       continue;
     data.push("P " + p.STEAM_ID);
     data.push("n " + p.NAME);
