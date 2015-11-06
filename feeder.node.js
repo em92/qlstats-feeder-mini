@@ -1,6 +1,19 @@
 ﻿/*
- Download new game results from http://www.quakelive.com/tracker/ and add them to the database
+ Fetch Quake Live statistics from game servers' ZeroMQ message queues, 
+ reformat it to XonStat match report format and 
+ send it to sumbission.py via HTTP POST.
+
+ Optionally save the stats to a .json.gz file or 
+ process saved files specified as command line arguments.
+
+ When the submission.py server is not responding with an "ok",
+ a .json.gz is saved in the <jsondir>/errors/ folder.
+
+ TODO:
+ - ability to add servers on-the-fly without restarting the feeder
+
 */
+
 "use strict";
 
 var
@@ -12,94 +25,99 @@ var
   zmq = require("zmq"),
   Q = require("q");
 
+var MonitorInterval = 60000; // check status of connections once per minute
+var IpPortPassRegex = /^((?:[0-9]{1,3}\.){3}[0-9]{1,3}):([0-9]+)(?:\/(.+))?$/;  // IP:port/pass
+
 var __dirname; // current working directory (defined by node.js)
 var _logger; // log4js logger
-var _config; // config data from cfg.json file
-var _adaptivePollDelaySec = 120; // will be reduced to 60 after first (=full) batch. Values are 15,30,60,120
+var _config; // config data from cfg.json
 
 main();
 
 function main() {
-  _logger = log4js.getLogger("ldtracker");
+  _logger = log4js.getLogger("feeder");
   _logger.setLevel(log4js.levels.DEBUG);
-  var data = fs.readFileSync(__dirname + "/cfg.json");
-  _config = JSON.parse(data);
+  _config = JSON.parse(fs.readFileSync(__dirname + "/cfg.json"));
   if (!(_config.loader.saveDownloadedJson || _config.loader.importDownloadedJson)) {
     _logger.error("At least one of loader.saveDownloadedJson or loader.importDownloadedJson must be set in cfg.json");
     process.exit();
   }
-  Q.longStackSupport = false;
+  Q.longStackSupport = false; // enable if you have to trace a problem, but it has a HUGE performance penalty
 
+  // process saved .json.gz files specified on the command line ... or connect to live zmq feeds
   if (process.argv.length > 2) {
     for (var i = 2; i < process.argv.length; i++)
       feedJsonFile(process.argv[i]);
   }
   else
-    connectToServerStatsZmq();
+    connectToServerList();
 }
 
 //==========================================================================================
 // QL stats data tracker
 //==========================================================================================
 
-function feedSampleData() {
-  var playerStats = [];
-  playerStats.push(JSON.parse(fs.readFileSync(__dirname + "/sample-data/playerstats1.json")).DATA);
-  playerStats.push(JSON.parse(fs.readFileSync(__dirname + "/sample-data/playerstats2.json")).DATA);
-  var matchStats = JSON.parse(fs.readFileSync(__dirname + "/sample-data/matchreport.json")).DATA;
-
-  var stats = {
-    serverIp: "127.0.0.1",
-    serverPort: 27960,
-    gameEndTimestamp: new Date().getTime() / 1000,
-    matchStats: matchStats,
-    playerStats: playerStats
-  }
-  processMatch(stats);
-}
 
 function feedJsonFile(file) {
-  if (!file.match(/.json(.gz)?$/))
+  if (!file.match(/.json(.gz)?$/)) {
+    _logger.warn("Skipping file (not *.json[.gz]): " + file);
     return;
+  }
   var isGzip = file.slice(-3) == ".gz";
-  _logger.debug("Loading " + file);
+  _logger.info("Loading " + file);
   var data = fs.readFileSync(file);
   if (isGzip)
     data = zlib.gunzipSync(data);
 
   var game = JSON.parse(data);
-  if (game.matchStats.MATCH_GUID)
-    processGame(game);
-  else
-    _logger.warn(file + ": no MATCH_GUID in json data. File was ignored.");
+  processGame(game);
 }
 
-
-function connectToServerStatsZmq() {
-  var regex = /^((?:[0-9]{1,3}\.){3}[0-9]{1,3}):([0-9]+)(?:\/(.+))?$/;
+function connectToServerList() {
+  if (!_config.loader.servers.length) {
+    _logger.error("There are no servers configured in cfg.json.");
+    return;
+  }
 
   for (var i = 0; i < _config.loader.servers.length; i++) {
     var server = _config.loader.servers[i];
-    var match = regex.exec(server);
-    if (!match)
+    var match = IpPortPassRegex.exec(server);
+    if (!match) {
+      _logger.warn(server + ": ignoring server (not IP:port[/password])");
       continue;
-
-    _logger.info("Connecting to " + server);
-
-    var sub = zmq.socket("sub");
-    if (match[3]) {
-      sub.sap_domain = "stats";
-      sub.plain_username = "stats";
-      sub.plain_password = match[3];
     }
-    sub.connect("tcp://" + server);
-    sub.subscribe("");
-
-    (function (sub, ip, port) {
-      var context = { addr: ip + ":" + port, ip: ip, port: port, playerStats: [] }
-      sub.on("message", function(data) { onZmqMessage(context, data) });
-    }) (sub, match[1], match[2]);
+    connectToZmq(match[1], match[2], match[3]);
   }
+}
+
+function connectToZmq(ip, port, pass) {
+  var addr = ip + ":" + port;
+
+  var sub = zmq.socket("sub");
+  if (pass) {
+    sub.sap_domain = "stats";
+    sub.plain_username = "stats";
+    sub.plain_password = pass;
+  }
+
+  _logger.debug("Connecting to " + addr);
+  var showFailMsg = true;
+  var context = { addr: addr, ip: ip, port: port, matchStarted: false, playerStats: [] }
+  sub.on("message", function(data) { onZmqMessage(context, data) });
+  sub.on("connect", function () { _logger.info("Connected to " + addr); showFailMsg = true; });
+  sub.on("connect_delay", function () {
+    if (showFailMsg) {
+      _logger.warn("Failed connecting to " + addr + ", but will keep trying...");
+      showFailMsg = false;
+    }
+  });
+  sub.on("connect_retry", function () { _logger.debug("Retrying connect to " + addr); });
+  sub.on("disconnect", function () { _logger.warn("Disconnected from " + addr); showFailMsg = false; });
+  sub.on("monitor_error", function() { _logger.error("Error monitoring " + addr); setTimeout(function() { sub.monitor(MonitorInterval, 0); }); });
+
+  sub.monitor(MonitorInterval, 0);
+  sub.connect("tcp://" + addr);
+  sub.subscribe("");
 }
 
 function onZmqMessage(context, data) {
@@ -107,17 +125,19 @@ function onZmqMessage(context, data) {
   var obj = JSON.parse(msg);
   _logger.debug(context.addr + ": received ZMQ message: " + obj.TYPE);
   if (obj.TYPE == "MATCH_STARTED") {
+    _logger.info(context.addr + ": match started");
     context.matchStarted = true;
   }
   else if (obj.TYPE == "PLAYER_STATS") {
-    if (context.matchStarted)
+    //if (context.matchStarted)
       context.playerStats.push(obj.DATA);
   }
   else if (obj.TYPE == "MATCH_REPORT") {
+    _logger.info(context.addr + ": match finished");
     var stats = {
       serverIp: context.ip,
       serverPort: context.port,
-      gameEndTimestamp: new Date().getTime() / 1000,
+      gameEndTimestamp: Math.round(new Date().getTime() / 1000),
       matchStats: obj.DATA,
       playerStats: context.playerStats
     };
@@ -140,12 +160,12 @@ function processMatch(stats) {
     .catch(function(err) { _logger.error(err.stack); });
 }
 
-function saveGameJson(game) {
+function saveGameJson(game, toErrorDir) {
   var GAME_TIMESTAMP = game.gameEndTimestamp;
   var basedir = _config.loader.jsondir;
   var date = new Date(GAME_TIMESTAMP * 1000);
-  var dirName1 = basedir + date.getFullYear() + "-" + ("0" + (date.getMonth() + 1)).slice(-2);
-  var dirName2 = dirName1 + "/" + ("0" + date.getDate()).slice(-2);
+  var dirName1 = toErrorDir ? basedir : basedir + date.getFullYear() + "-" + ("0" + (date.getMonth() + 1)).slice(-2);
+  var dirName2 = toErrorDir ? basedir + "errors" : dirName1 + "/" + ("0" + date.getDate()).slice(-2);
   var filePath = dirName2 + "/" + game.matchStats.MATCH_GUID + ".json.gz";
   _logger.debug("saving JSON: " + filePath);
   return createDir(dirName1)
@@ -176,12 +196,10 @@ function processGame(game) {
   var defer = Q.defer();
 
   var gt = getGametype(game.matchStats.GAME_TYPE);
-  if (!gt)
+  if (",ffa,duel,ca,tdm,ctf,ft,".indexOf("," + gt + ",") < 0) {
+    _logger.debug(game.serverIp + ":" + game.serverPort + ": unsupported game type: " + gt);
     return false;
-
-  //if (gt != "ca")
-  // return false;
-  //saveGameJson(game);
+  }
 
   var data = [];
   data.push("0 " + game.serverIp); // not XonStat standard
@@ -196,22 +214,12 @@ function processGame(game) {
   data.push("D " + game.matchStats.GAME_LENGTH);
 
   var allWeapons = { gt: "GAUNTLET", mg: "MACHINEGUN", sg: "SHOTGUN", gl: "GRENADE", rl: "ROCKET", lg: "LIGHTNING", rg: "RAILGUN", pg: "PLASMA", bfg: "BFG", hmg: "HMG", cg: "CHAINGUN",  ng: "NAILGUN", pm: "PROXMINE", gh: "OTHER_WEAPON"};
-  var usedWeapons = allWeapons;
-  /*
-  var usedWeapons = {};
-  for (var w in allWeapons) {
-    for (var i=0; i<game.SCOREBOARD.length; i++) {
-    if (parseInt(game.SCOREBOARD[i][allWeapons[w] + "_SHOTS"]) || parseInt(game.SCOREBOARD[i][allWeapons[w] + "_KILLS"])) {
-    usedWeapons[w] = allWeapons[w];
-    }
-  }
-  }
-  */
-  var ok;
+ 
+  var ok = false;
   if ("ffa,duel".indexOf(gt) >= 0)
-    ok = exportScoreboard(game.playerStats, 0, true, usedWeapons, data);
+    ok = exportScoreboard(game.playerStats, 0, true, allWeapons, data);
   //else if (game.RACE_SCOREBOARD)
-  //  ok = exportScoreboard(game.RACE_SCOREBOARD, 0, true, usedWeapons, data);
+    //  ok = exportScoreboard(game.RACE_SCOREBOARD, 0, true, allWeapons, data);
   else if ("ca,tdm,ctf,ft".indexOf(gt) >= 0) {
     var redWon = parseInt(game.matchStats.TSCORE0) > parseInt(game.matchStats.TSCORE1);
     ok = exportTeamSummary(gt, game.matchStats, 1, data)
@@ -220,8 +228,10 @@ function processGame(game) {
     && exportScoreboard(game.playerStats, 2, !redWon, allWeapons, data);
   }
 
-  if (!ok)
+  if (!ok) {
+    _logger.warn(game.serverIp + ":" + game.serverPort + ": failed to generate data for " + game.matchStats.MATCH_GUID);
     return false;
+  }
 
   request({
       uri: "http://localhost:" + _config.loader.xonstatPort + "/stats/submit",
@@ -233,10 +243,11 @@ function processGame(game) {
     function(err) {
       if (err) {
         _logger.error("Error posting data to QLstats: " + err);
+        saveGameJson(game, true);
         defer.reject(new Error(err));
       } else {
         _logger.debug("Successfully posted data to QLstats");
-        defer.resolve();
+        defer.resolve(true);
       }
     });
   return defer.promise;
@@ -258,8 +269,7 @@ function getGametype(gt) {
   case "race":
     return gt;
   default:
-    _logger.debug("unsupported game type: " + gt);
-    return undefined;
+    return gt;
   }
 }
 
