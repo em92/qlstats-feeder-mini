@@ -38,12 +38,9 @@ main();
 function main() {
   _logger = log4js.getLogger("feeder");
   _logger.setLevel(log4js.levels.DEBUG);
-  _config = JSON.parse(fs.readFileSync(__dirname + "/cfg.json"));
-  if (!(_config.loader.saveDownloadedJson || _config.loader.importDownloadedJson)) {
-    _logger.error("At least one of loader.saveDownloadedJson or loader.importDownloadedJson must be set in cfg.json");
-    process.exit();
-  }
   Q.longStackSupport = false; // enable if you have to trace a problem, but it has a HUGE performance penalty
+
+  reloadConfig();
 
   // process saved .json.gz files specified on the command line ... or connect to live zmq feeds
   if (process.argv.length > 2) {
@@ -51,7 +48,10 @@ function main() {
       feedJsonFile(process.argv[i]);
   } else {
     connectToServerList(_config.loader.servers);
-    fs.watch(__dirname + "/cfg.json", reloadServerListFromChangedConfigFile);
+    fs.watch(__dirname + "/cfg.json", function () {
+      if (reloadConfig())
+        connectToServerList(_config.loader.servers);
+    });
   }
 }
 
@@ -75,15 +75,21 @@ function feedJsonFile(file) {
   processGame(game);
 }
 
-function reloadServerListFromChangedConfigFile() {
+function reloadConfig() {
   try {
-    var cfg = JSON.parse(fs.readFileSync(__dirname + "/cfg.json"));
-    _config.loader.servers = cfg.loader.servers;
-    connectToServerList(cfg.loader.servers);
-  } catch (err) {
-    if (err.code != "EBUSY" && err.code != "ENOENT") {
-      _logger.error("Failed to reload the server list: " + err);
+    _config = JSON.parse(fs.readFileSync(__dirname + "/cfg.json"));
+    if (!(_config.loader.saveDownloadedJson || _config.loader.importDownloadedJson)) {
+      _logger.error("At least one of loader.saveDownloadedJson or loader.importDownloadedJson must be set in cfg.json");
+      process.exit();
     }
+    _logger.info("Reloaded modified of cfg.json");
+    return true;
+  } catch (err) {
+    // while being saved by the editor, the config file can be locked or removed temporarily
+    // there will be another file system watcher event when the lock is released
+    if (err.code != "EBUSY" && err.code != "ENOENT")
+      _logger.error("Failed to reload the server list: " + err);
+    return false;
   }
 }
 
