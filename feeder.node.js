@@ -344,7 +344,7 @@ function exportScoreboard(scoreboard, team, isWinnerTeam, weapons, data) {
     mapFields(p.MEDALS, medalMapping, data);
 
     for (var w in weapons) {
-      if (!weapons.hasOwnProperty(key)) continue;
+      if (!weapons.hasOwnProperty(w)) continue;
       var lname = weapons[w];
       var wstats = p.WEAPONS[lname];
       var kills = wstats && wstats.K;
@@ -378,7 +378,7 @@ function exportTeamSummary(gt, matchstats, team, data) {
 
 function mapFields(info, mapping, data) {
   for (var field in mapping) {
-    if (!mapping.hasOwnProperty(key)) continue;
+    if (!mapping.hasOwnProperty(field)) continue;
     if (field in info)
       data.push("e scoreboard-" + mapping[field] + " " + info[field]);
   }
