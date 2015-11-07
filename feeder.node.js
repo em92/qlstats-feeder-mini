@@ -174,6 +174,7 @@ function onZmqMessage(context, data) {
   }
   else if (obj.TYPE == "PLAYER_STATS") {
     //if (context.matchStarted)
+    if (!obj.DATA.WARMUP)
       context.playerStats.push(obj.DATA);
   }
   else if (obj.TYPE == "MATCH_REPORT") {
