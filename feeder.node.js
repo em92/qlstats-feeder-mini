@@ -1,5 +1,5 @@
 ﻿/*
- Fetch Quake Live statistics from game servers' ZeroMQ message queues, 
+ Fetch Quake Live statistics from game server ZeroMQ message queues, 
  reformat it to XonStat match report format and 
  send it to sumbission.py via HTTP POST.
 
@@ -9,16 +9,16 @@
  When the submission.py server is not responding with an "ok",
  a .json.gz is saved in the <jsondir>/errors/ folder.
 
- The script monitors changes to the config file an automatically 
- connects to added server and disconnects from removed servers.
+ The script monitors changes to the config file and automatically 
+ connects to added servers and disconnects from removed servers.
 
+ Reconnecting to ZeroMQ is handled internally by the zmq sockets.
 */
 
 "use strict";
 
 var
   fs = require("graceful-fs"),
-  async = require("async"),
   request = require("request"),
   log4js = require("log4js"),
   zlib = require("zlib"),
@@ -54,43 +54,38 @@ function main() {
   }
 }
 
-//==========================================================================================
-// QL stats data tracker
-//==========================================================================================
-
-
-function feedJsonFile(file) {
-  if (!file.match(/.json(.gz)?$/)) {
-    _logger.warn("Skipping file (not *.json[.gz]): " + file);
-    return;
-  }
-  var isGzip = file.slice(-3) == ".gz";
-  _logger.info("Loading " + file);
-  var data = fs.readFileSync(file);
-  if (isGzip)
-    data = zlib.gunzipSync(data);
-
-  var game = JSON.parse(data);
-  processGame(game);
-}
-
 function reloadConfig() {
   try {
     _config = JSON.parse(fs.readFileSync(__dirname + "/cfg.json"));
     if (!(_config.feeder.saveDownloadedJson || _config.feeder.importDownloadedJson)) {
-      _logger.error("At least one of loader.saveDownloadedJson or loader.importDownloadedJson must be set in cfg.json");
+      _logger.error("At least one of feeder.saveDownloadedJson or feeder.importDownloadedJson must be set in cfg.json");
       process.exit();
     }
+
     _logger.setLevel(_config.feeder.logLevel || log4js.levels.INFO);
     _logger.info("Reloaded modified of cfg.json");
     return true;
-  } catch (err) {
-    // while being saved by the editor, the config file can be locked or removed temporarily
+  }
+  catch (err) {
+    // while being saved by the editor, the config file can be locked, temporarily removed or incomplete.
     // there will be another file system watcher event when the lock is released
     if (err.code != "EBUSY" && err.code != "ENOENT")
       _logger.error("Failed to reload the server list: " + err);
     return false;
   }
+}
+
+function feedJsonFile(file) {
+  if (!file.match(/.json(.gz)?$/)) {
+    _logger.warn("Skipping file (not *.json[.gz]): " + file);
+    return false;
+  }
+
+  _logger.info("Loading " + file);
+  var data = fs.readFileSync(file);
+  if (file.slice(-3) == ".gz")
+    data = zlib.gunzipSync(data);
+  return processGame(JSON.parse(data));
 }
 
 function connectToServerList(servers) {
@@ -100,6 +95,7 @@ function connectToServerList(servers) {
   }
 
   // create a new dictionary with the zmq connections for the new server list
+  // after the loop _zmqConnections only contains servers which are no longer configured
   var newZmqConnections = {};
   for (var i = 0; i < servers.length; i++) {
     var server = servers[i];
@@ -112,21 +108,20 @@ function connectToServerList(servers) {
     var ip = match[1];
     var port = match[2];
     var pass = match[3];
-    var key = ip + ":" + port;
-    var sub = _zmqConnections[key];
-    if (sub && pass == sub.plain_password) {
-      delete _zmqConnections[key];
-    } else {
-      sub = connectToZmq(ip, port, pass);
-    }
-    newZmqConnections[key] = sub;
+    var addr = ip + ":" + port;
+    var sub = _zmqConnections[addr];
+    if (sub && pass == sub.plain_password)
+      delete _zmqConnections[addr];
+    else
+      sub = connectToZmq(ip, port, pass);   
+    newZmqConnections[addr] = sub;
   }
 
   // shut down connections to servers which are no longer in the config
-  for (var key in _zmqConnections) {
-    if (!_zmqConnections.hasOwnProperty(key)) continue;
-    var sub = _zmqConnections[key];
-    _logger.info(key + ": disconnected. Server was removed from config.");
+  for (var addr in _zmqConnections) {
+    if (!_zmqConnections.hasOwnProperty(addr)) continue;
+    var sub = _zmqConnections[addr];
+    _logger.info(addr + ": disconnected. Server was removed from config.");
     try { sub.disconnect(); } catch (err) { }
     try { sub.close(); } catch (err) { }
     try { sub.unmonitor(); } catch (err) { }
@@ -173,7 +168,6 @@ function onZmqMessage(context, data) {
     context.matchStarted = true;
   }
   else if (obj.TYPE == "PLAYER_STATS") {
-    //if (context.matchStarted)
     if (!obj.DATA.WARMUP)
       context.playerStats.push(obj.DATA);
   }
@@ -187,10 +181,7 @@ function onZmqMessage(context, data) {
       playerStats: context.playerStats
     };
     context.playerStats = [];
-    //if (context.matchStarted) {
-    //  context.matchStarted = false;
-      processMatch(stats);
-    //}
+    processMatch(stats);
   }
 }
 
@@ -206,9 +197,8 @@ function processMatch(stats) {
 }
 
 function saveGameJson(game, toErrorDir) {
-  var GAME_TIMESTAMP = game.gameEndTimestamp;
   var basedir = _config.feeder.jsondir;
-  var date = new Date(GAME_TIMESTAMP * 1000);
+  var date = new Date(game.gameEndTimestamp * 1000);
   var dirName1 = toErrorDir ? basedir : basedir + date.getFullYear() + "-" + ("0" + (date.getMonth() + 1)).slice(-2);
   var dirName2 = toErrorDir ? basedir + "errors" : dirName1 + "/" + ("0" + date.getDate()).slice(-2);
   var filePath = dirName2 + "/" + game.matchStats.MATCH_GUID + ".json.gz";
@@ -217,9 +207,7 @@ function saveGameJson(game, toErrorDir) {
     .then(createDir(dirName2))
     .then(function() {
       var json = JSON.stringify(game);
-      return Q.nfcall(zlib.gzip, json);
-    })
-    .then(function(gzip) {
+      var gzip = zlib.gzip(json);
       return Q.nfcall(fs.writeFile, filePath, gzip);
     })
     .fail(function(err) { _logger.error("Can't save game JSON: " + err.stack); });
@@ -238,7 +226,6 @@ function createDir(dir) {
 }
 
 function processGame(game) {
-  var defer = Q.defer();
   var addr = game.serverIp + ":" + game.serverPort;
 
   if (game.matchStats.ABORTED) {
@@ -246,7 +233,7 @@ function processGame(game) {
     return false;
   }
 
-  var gt = getGametype(game.matchStats.GAME_TYPE);
+  var gt = game.matchStats.GAME_TYPE.toLowerCase();
   if (",ffa,duel,ca,tdm,ctf,ft,".indexOf("," + gt + ",") < 0) {
     _logger.debug(addr + ": unsupported game type: " + gt);
     return false;
@@ -264,17 +251,17 @@ function processGame(game) {
   data.push("U " + game.serverPort);
   data.push("D " + game.matchStats.GAME_LENGTH);
 
-  var allWeapons = { gt: "GAUNTLET", mg: "MACHINEGUN", sg: "SHOTGUN", gl: "GRENADE", rl: "ROCKET", lg: "LIGHTNING", rg: "RAILGUN", pg: "PLASMA", bfg: "BFG", hmg: "HMG", cg: "CHAINGUN",  ng: "NAILGUN", pm: "PROXMINE", gh: "OTHER_WEAPON"};
- 
+  var allWeapons = { gt: "GAUNTLET", mg: "MACHINEGUN", sg: "SHOTGUN", gl: "GRENADE", rl: "ROCKET", lg: "LIGHTNING", rg: "RAILGUN", pg: "PLASMA", bfg: "BFG", hmg: "HMG", cg: "CHAINGUN", ng: "NAILGUN", pm: "PROXMINE", gh: "OTHER_WEAPON" };
+
   var ok = false;
   if ("ffa,duel,race".indexOf(gt) >= 0)
     ok = exportScoreboard(game.playerStats, 0, true, allWeapons, data);
   else if ("ca,tdm,ctf,ft".indexOf(gt) >= 0) {
     var redWon = parseInt(game.matchStats.TSCORE0) > parseInt(game.matchStats.TSCORE1);
     ok = exportTeamSummary(gt, game.matchStats, 1, data)
-    && exportScoreboard(game.playerStats, 1, redWon, allWeapons, data)
-    && exportTeamSummary(gt, game.matchStats, 2, data)
-    && exportScoreboard(game.playerStats, 2, !redWon, allWeapons, data);
+      && exportScoreboard(game.playerStats, 1, redWon, allWeapons, data)
+      && exportTeamSummary(gt, game.matchStats, 2, data)
+      && exportScoreboard(game.playerStats, 2, !redWon, allWeapons, data);
   }
 
   if (!ok) {
@@ -282,44 +269,7 @@ function processGame(game) {
     return false;
   }
 
-  request({
-      uri: "http://localhost:" + _config.feeder.xonstatPort + "/stats/submit",
-      timeout: 10000,
-      method: "POST",
-      headers: { /*"X-Forwarded-For": "0.0.0.0", */ "X-D0-Blind-Id-Detached-Signature": "dummy" },
-      body: data.join("\n")
-    },
-    function(err) {
-      if (err) {
-        _logger.error(addr + ": upload failed: " + game.matchStats.MATCH_GUID +": " + err);
-        saveGameJson(game, true);
-        defer.reject(new Error(err));
-      } else {
-        _logger.info(addr + ": match uploaded: " + game.matchStats.MATCH_GUID);
-        defer.resolve(true);
-      }
-    });
-  return defer.promise;
-}
-
-function getGametype(gt) {
-  gt = gt.toLowerCase();
-  switch (gt) {
-  case "tourney":
-  case "duel":
-    return "duel";
-  case "ffa":
-  case "dm":
-    return "ffa";
-  case "ca":
-  case "tdm":
-  case "ctf":
-  case "ft":
-  case "race":
-    return gt;
-  default:
-    return gt;
-  }
+  return postMatchReportToXonstat(game, data.join("\n"));
 }
 
 function exportScoreboard(scoreboard, team, isWinnerTeam, weapons, data) {
@@ -331,6 +281,7 @@ function exportScoreboard(scoreboard, team, isWinnerTeam, weapons, data) {
     _logger.debug("not enough players in team " + team);
     return false;
   }
+
   for (var i = 0; i < scoreboard.length; i++) {
     var p = scoreboard[i];
     if ((team || p.TEAM) && p.TEAM != team)
@@ -392,3 +343,24 @@ function mapFields(info, mapping, data) {
   }
 }
 
+function postMatchReportToXonstat(game, report) {
+  var defer = Q.defer();
+  request({
+    uri: "http://localhost:" + _config.feeder.xonstatPort + "/stats/submit",
+    timeout: 10000,
+    method: "POST",
+    headers: { "X-D0-Blind-Id-Detached-Signature": "dummy" },
+    body: report
+  },
+    function (err) {
+      if (err) {
+        _logger.error(addr + ": upload failed: " + game.matchStats.MATCH_GUID + ": " + err);
+        saveGameJson(game, true);
+        defer.reject(new Error(err));
+      } else {
+        _logger.info(addr + ": match uploaded: " + game.matchStats.MATCH_GUID);
+        defer.resolve(true);
+      }
+    });
+  return defer.promise;
+}
