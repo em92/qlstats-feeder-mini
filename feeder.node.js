@@ -46,10 +46,10 @@ function main() {
     for (var i = 2; i < process.argv.length; i++)
       feedJsonFile(process.argv[i]);
   } else {
-    connectToServerList(_config.loader.servers);
+    connectToServerList(_config.feeder.servers);
     fs.watch(__dirname + "/cfg.json", function () {
       if (reloadConfig())
-        connectToServerList(_config.loader.servers);
+        connectToServerList(_config.feeder.servers);
     });
   }
 }
@@ -77,11 +77,11 @@ function feedJsonFile(file) {
 function reloadConfig() {
   try {
     _config = JSON.parse(fs.readFileSync(__dirname + "/cfg.json"));
-    if (!(_config.loader.saveDownloadedJson || _config.loader.importDownloadedJson)) {
+    if (!(_config.feeder.saveDownloadedJson || _config.feeder.importDownloadedJson)) {
       _logger.error("At least one of loader.saveDownloadedJson or loader.importDownloadedJson must be set in cfg.json");
       process.exit();
     }
-    _logger.setLevel(_config.loader.logLevel || log4js.levels.INFO);
+    _logger.setLevel(_config.feeder.logLevel || log4js.levels.INFO);
     _logger.info("Reloaded modified of cfg.json");
     return true;
   } catch (err) {
@@ -111,12 +111,15 @@ function connectToServerList(servers) {
 
     var ip = match[1];
     var port = match[2];
+    var pass = match[3];
     var key = ip + ":" + port;
     var sub = _zmqConnections[key];
-    if (sub)
+    if (sub) {
+      sub.plain_password = pass;
       delete _zmqConnections[key];
-    else
-      sub = connectToZmq(ip, port, match[3]);
+    } else {
+      sub = connectToZmq(ip, port, pass);
+    }
     newZmqConnections[key] = sub;
   }
 
@@ -167,7 +170,7 @@ function onZmqMessage(context, data) {
   var obj = JSON.parse(msg);
   _logger.debug(context.addr + ": received ZMQ message: " + obj.TYPE);
   if (obj.TYPE == "MATCH_STARTED") {
-    _logger.info(context.addr + ": match started");
+    _logger.debug(context.addr + ": match started");
     context.matchStarted = true;
   }
   else if (obj.TYPE == "PLAYER_STATS") {
@@ -175,7 +178,7 @@ function onZmqMessage(context, data) {
       context.playerStats.push(obj.DATA);
   }
   else if (obj.TYPE == "MATCH_REPORT") {
-    _logger.info(context.addr + ": match finished");
+    _logger.debug(context.addr + ": match finished");
     var stats = {
       serverIp: context.ip,
       serverPort: context.port,
@@ -193,9 +196,9 @@ function onZmqMessage(context, data) {
 
 function processMatch(stats) {
   var tasks = [];
-  if (_config.loader.saveDownloadedJson)
+  if (_config.feeder.saveDownloadedJson)
     tasks.push(saveGameJson(stats));
-  if (_config.loader.importDownloadedJson)
+  if (_config.feeder.importDownloadedJson)
     tasks.push(processGame(stats));
   return Q
     .allSettled(tasks)
@@ -204,7 +207,7 @@ function processMatch(stats) {
 
 function saveGameJson(game, toErrorDir) {
   var GAME_TIMESTAMP = game.gameEndTimestamp;
-  var basedir = _config.loader.jsondir;
+  var basedir = _config.feeder.jsondir;
   var date = new Date(GAME_TIMESTAMP * 1000);
   var dirName1 = toErrorDir ? basedir : basedir + date.getFullYear() + "-" + ("0" + (date.getMonth() + 1)).slice(-2);
   var dirName2 = toErrorDir ? basedir + "errors" : dirName1 + "/" + ("0" + date.getDate()).slice(-2);
@@ -236,9 +239,11 @@ function createDir(dir) {
 
 function processGame(game) {
   var defer = Q.defer();
+  var addr = game.serverIp + ":" + game.serverPort;
+
   var gt = getGametype(game.matchStats.GAME_TYPE);
   if (",ffa,duel,ca,tdm,ctf,ft,".indexOf("," + gt + ",") < 0) {
-    _logger.debug(game.serverIp + ":" + game.serverPort + ": unsupported game type: " + gt);
+    _logger.debug(addr + ": unsupported game type: " + gt);
     return false;
   }
 
@@ -257,10 +262,8 @@ function processGame(game) {
   var allWeapons = { gt: "GAUNTLET", mg: "MACHINEGUN", sg: "SHOTGUN", gl: "GRENADE", rl: "ROCKET", lg: "LIGHTNING", rg: "RAILGUN", pg: "PLASMA", bfg: "BFG", hmg: "HMG", cg: "CHAINGUN",  ng: "NAILGUN", pm: "PROXMINE", gh: "OTHER_WEAPON"};
  
   var ok = false;
-  if ("ffa,duel".indexOf(gt) >= 0)
+  if ("ffa,duel,race".indexOf(gt) >= 0)
     ok = exportScoreboard(game.playerStats, 0, true, allWeapons, data);
-  //else if (game.RACE_SCOREBOARD)
-    //  ok = exportScoreboard(game.RACE_SCOREBOARD, 0, true, allWeapons, data);
   else if ("ca,tdm,ctf,ft".indexOf(gt) >= 0) {
     var redWon = parseInt(game.matchStats.TSCORE0) > parseInt(game.matchStats.TSCORE1);
     ok = exportTeamSummary(gt, game.matchStats, 1, data)
@@ -270,12 +273,12 @@ function processGame(game) {
   }
 
   if (!ok) {
-    _logger.info(game.serverIp + ":" + game.serverPort + ": match doesn't meet requirements for stats tracking");
+    _logger.info(addr + ": match doesn't meet requirements: " + game.matchStats.MATCH_GUID);
     return false;
   }
 
   request({
-      uri: "http://localhost:" + _config.loader.xonstatPort + "/stats/submit",
+      uri: "http://localhost:" + _config.feeder.xonstatPort + "/stats/submit",
       timeout: 10000,
       method: "POST",
       headers: { /*"X-Forwarded-For": "0.0.0.0", */ "X-D0-Blind-Id-Detached-Signature": "dummy" },
@@ -283,11 +286,11 @@ function processGame(game) {
     },
     function(err) {
       if (err) {
-        _logger.error("Error posting data to QLstats: " + err);
+        _logger.error(addr + ": upload failed: " + game.matchStats.MATCH_GUID +": " + err);
         saveGameJson(game, true);
         defer.reject(new Error(err));
       } else {
-        _logger.debug("Successfully posted data to QLstats");
+        _logger.info(addr + ": match uploaded: " + game.matchStats.MATCH_GUID);
         defer.resolve(true);
       }
     });
