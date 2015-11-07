@@ -26,7 +26,7 @@ var
   Q = require("q");
 
 var MonitorInterval = 1000; // interval for checking connection status
-var IpPortPassRegex = /^((?:[0-9]{1,3}\.){3}[0-9]{1,3}):([0-9]+)(?:\/(.+))?$/;  // IP:port/pass
+var IpPortPassRegex = /^((?:[0-9]{1,3}\.){3}[0-9]{1,3}):([0-9]+)(?:\/(.*))?$/;  // IP:port/pass
 
 var __dirname; // current working directory (defined by node.js)
 var _logger; // log4js logger
@@ -114,8 +114,7 @@ function connectToServerList(servers) {
     var pass = match[3];
     var key = ip + ":" + port;
     var sub = _zmqConnections[key];
-    if (sub) {
-      sub.plain_password = pass;
+    if (sub && pass == sub.plain_password) {
       delete _zmqConnections[key];
     } else {
       sub = connectToZmq(ip, port, pass);
@@ -240,6 +239,11 @@ function createDir(dir) {
 function processGame(game) {
   var defer = Q.defer();
   var addr = game.serverIp + ":" + game.serverPort;
+
+  if (game.matchStats.ABORTED) {
+    _logger.debug(addr + ": ignoring aborted game " + game.matchStats.MATCH_GUID);
+    return false;
+  }
 
   var gt = getGametype(game.matchStats.GAME_TYPE);
   if (",ffa,duel,ca,tdm,ctf,ft,".indexOf("," + gt + ",") < 0) {
