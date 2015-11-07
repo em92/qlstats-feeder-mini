@@ -205,9 +205,11 @@ function saveGameJson(game, toErrorDir) {
   _logger.debug("saving JSON: " + filePath);
   return createDir(dirName1)
     .then(createDir(dirName2))
-    .then(function() {
+    .then(function () {
       var json = JSON.stringify(game);
-      var gzip = zlib.gzip(json);
+      return Q.nfcall(zlib.gzip, json);
+    })
+    .then(function (gzip) {
       return Q.nfcall(fs.writeFile, filePath, gzip);
     })
     .fail(function(err) { _logger.error("Can't save game JSON: " + err.stack); });
@@ -255,13 +257,13 @@ function processGame(game) {
 
   var ok = false;
   if ("ffa,duel,race".indexOf(gt) >= 0)
-    ok = exportScoreboard(game.playerStats, 0, true, allWeapons, data);
+    ok = exportScoreboard(gt, game.playerStats, 0, true, allWeapons, data);
   else if ("ca,tdm,ctf,ft".indexOf(gt) >= 0) {
     var redWon = parseInt(game.matchStats.TSCORE0) > parseInt(game.matchStats.TSCORE1);
     ok = exportTeamSummary(gt, game.matchStats, 1, data)
-      && exportScoreboard(game.playerStats, 1, redWon, allWeapons, data)
+      && exportScoreboard(gt, game.playerStats, 1, redWon, allWeapons, data)
       && exportTeamSummary(gt, game.matchStats, 2, data)
-      && exportScoreboard(game.playerStats, 2, !redWon, allWeapons, data);
+      && exportScoreboard(gt, game.playerStats, 2, !redWon, allWeapons, data);
   }
 
   if (!ok) {
@@ -269,38 +271,41 @@ function processGame(game) {
     return false;
   }
 
-  return postMatchReportToXonstat(game, data.join("\n"));
+  return postMatchReportToXonstat(addr, game, data.join("\n"));
 }
 
-function exportScoreboard(scoreboard, team, isWinnerTeam, weapons, data) {
+function exportScoreboard(gt, scoreboard, team, isWinnerTeam, weapons, report) {
   var playerMapping = { SCORE: "score", KILLS: "kills", DEATHS: "deaths" };
   var damageMapping = { DEALT: "pushes", TAKEN: "destroyed" };
-  var medalMapping = { CAPTURES: "captured", ASSISTS: "returns", THAWS: "revivals" };
+  var medalMapping = { CAPTURES: "captured", ASSISTS: "returns" };
 
   if (!scoreboard || !scoreboard.length || scoreboard.length < 2) {
     _logger.debug("not enough players in team " + team);
     return false;
   }
 
+  if (gt == "ft")
+    medalMapping.ASSISTS = "revivals";
+
   for (var i = 0; i < scoreboard.length; i++) {
     var p = scoreboard[i];
     if ((team || p.TEAM) && p.TEAM != team)
       continue;
-    data.push("P " + p.STEAM_ID);
-    data.push("n " + p.NAME);
+    report.push("P " + p.STEAM_ID);
+    report.push("n " + p.NAME);
     if (team)
-      data.push("t " + team);
-    data.push("e matches 1");
-    data.push("e scoreboardvalid 1");
-    data.push("e alivetime " + p.PLAY_TIME);
-    data.push("e rank " + p.RANK);
+      report.push("t " + team);
+    report.push("e matches 1");
+    report.push("e scoreboardvalid 1");
+    report.push("e alivetime " + p.PLAY_TIME);
+    report.push("e rank " + p.RANK);
     if (p.RANK == "1" && isWinnerTeam)
-      data.push("e wins");
-    data.push("e scoreboardpos " + p.RANK);
+      report.push("e wins");
+    report.push("e scoreboardpos " + p.RANK);
 
-    mapFields(p, playerMapping, data);
-    mapFields(p.DAMAGE, damageMapping, data);
-    mapFields(p.MEDALS, medalMapping, data);
+    mapFields(p, playerMapping, report);
+    mapFields(p.DAMAGE, damageMapping, report);
+    mapFields(p.MEDALS, medalMapping, report);
 
     for (var w in weapons) {
       if (!weapons.hasOwnProperty(w)) continue;
@@ -309,9 +314,9 @@ function exportScoreboard(scoreboard, team, isWinnerTeam, weapons, data) {
       var kills = wstats && wstats.K;
       if (kills === undefined)
         continue;
-      data.push("e acc-" + w + "-cnt-fired " + wstats.S);
-      data.push("e acc-" + w + "-cnt-hit " + wstats.H);
-      data.push("e acc-" + w + "-frags " + wstats.K);
+      report.push("e acc-" + w + "-cnt-fired " + wstats.S);
+      report.push("e acc-" + w + "-cnt-hit " + wstats.H);
+      report.push("e acc-" + w + "-frags " + wstats.K);
     }
   }
   return true;
@@ -343,16 +348,16 @@ function mapFields(info, mapping, data) {
   }
 }
 
-function postMatchReportToXonstat(game, report) {
+function postMatchReportToXonstat(addr, game, report) {
   var defer = Q.defer();
   request({
-    uri: "http://localhost:" + _config.feeder.xonstatPort + "/stats/submit",
-    timeout: 10000,
-    method: "POST",
-    headers: { "X-D0-Blind-Id-Detached-Signature": "dummy" },
-    body: report
-  },
-    function (err) {
+      uri: "http://localhost:" + _config.feeder.xonstatPort + "/stats/submit",
+      timeout: 10000,
+      method: "POST",
+      headers: { "X-D0-Blind-Id-Detached-Signature": "dummy" },
+      body: report
+    },
+    function(err) {
       if (err) {
         _logger.error(addr + ": upload failed: " + game.matchStats.MATCH_GUID + ": " + err);
         saveGameJson(game, true);
