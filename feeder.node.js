@@ -241,29 +241,20 @@ function processGame(game) {
     return false;
   }
 
-  var data = [];
-  data.push("0 " + game.serverIp); // not XonStat standard
-  data.push("S " + game.matchStats.SERVER_TITLE);
-  data.push("I " + game.matchStats.MATCH_GUID);
-  data.push("G " + gt);
-  data.push("M " + game.matchStats.MAP);
-  data.push("O baseq3");
-  data.push("V 7"); // CA must be >= 6 
-  data.push("R .1");
-  data.push("U " + game.serverPort);
-  data.push("D " + game.matchStats.GAME_LENGTH);
+  var report = [];
+  exportMatchInformation(game, report);
 
   var allWeapons = { gt: "GAUNTLET", mg: "MACHINEGUN", sg: "SHOTGUN", gl: "GRENADE", rl: "ROCKET", lg: "LIGHTNING", rg: "RAILGUN", pg: "PLASMA", bfg: "BFG", hmg: "HMG", cg: "CHAINGUN", ng: "NAILGUN", pm: "PROXMINE", gh: "OTHER_WEAPON" };
 
   var ok = false;
   if ("ffa,duel,race".indexOf(gt) >= 0)
-    ok = exportScoreboard(gt, game.playerStats, 0, true, allWeapons, data);
+    ok = exportScoreboard(gt, game.playerStats, 0, true, allWeapons, report);
   else if ("ca,tdm,ctf,ft".indexOf(gt) >= 0) {
     var redWon = parseInt(game.matchStats.TSCORE0) > parseInt(game.matchStats.TSCORE1);
-    ok = exportTeamSummary(gt, game.matchStats, 1, data)
-      && exportScoreboard(gt, game.playerStats, 1, redWon, allWeapons, data)
-      && exportTeamSummary(gt, game.matchStats, 2, data)
-      && exportScoreboard(gt, game.playerStats, 2, !redWon, allWeapons, data);
+    ok = exportTeamSummary(gt, game.matchStats, 1, report)
+      && exportScoreboard(gt, game.playerStats, 1, redWon, allWeapons, report)
+      && exportTeamSummary(gt, game.matchStats, 2, report)
+      && exportScoreboard(gt, game.playerStats, 2, !redWon, allWeapons, report);
   }
 
   if (!ok) {
@@ -271,7 +262,20 @@ function processGame(game) {
     return false;
   }
 
-  return postMatchReportToXonstat(addr, game, data.join("\n"));
+  return postMatchReportToXonstat(addr, game, report.join("\n"));
+}
+
+function exportMatchInformation(game, report) {
+  report.push("0 " + game.serverIp); // not XonStat standard
+  report.push("S " + game.matchStats.SERVER_TITLE);
+  report.push("I " + game.matchStats.MATCH_GUID);
+  report.push("G " + gt);
+  report.push("M " + game.matchStats.MAP);
+  report.push("O baseq3");
+  report.push("V 7"); // CA must be >= 6 
+  report.push("R .1");
+  report.push("U " + game.serverPort);
+  report.push("D " + game.matchStats.GAME_LENGTH);
 }
 
 function exportScoreboard(gt, scoreboard, team, isWinnerTeam, weapons, report) {
@@ -299,8 +303,8 @@ function exportScoreboard(gt, scoreboard, team, isWinnerTeam, weapons, report) {
     report.push("e scoreboardvalid 1");
     report.push("e alivetime " + p.PLAY_TIME);
     report.push("e rank " + p.RANK);
-    if (p.RANK == "1" && isWinnerTeam)
-      report.push("e wins");
+    if ((team == 0 && p.RANK == "1") || isWinnerTeam)
+      report.push("e wins 1");
     report.push("e scoreboardpos " + p.RANK);
 
     mapFields(p, playerMapping, report);
@@ -337,6 +341,10 @@ function exportTeamSummary(gt, matchstats, team, data) {
 
   data.push("Q team#" + team);
   mapFields(info, mapping, data);
+  // not filled:
+  // scoreboard-score
+  // scoreboard-caps
+  // scoreboard-rounds
   return true;
 }
 
