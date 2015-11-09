@@ -47,9 +47,16 @@ function main() {
       feedJsonFile(process.argv[i]);
   } else {
     connectToServerList(_config.feeder.servers);
+	var timer;
     fs.watch(__dirname + "/cfg.json", function () {
-      if (reloadConfig())
-        connectToServerList(_config.feeder.servers);
+	  // execute the reload after a delay to give an editor the chance to delete/truncate/write/flush/close/release the file
+      if (timer)
+        clearTimeout(timer);
+	  timer = setTimeout(function() {
+        timer = undefined;
+        if (reloadConfig())
+          connectToServerList(_config.feeder.servers);
+	  }, 500);
     });
   }
 }
