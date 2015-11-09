@@ -249,7 +249,7 @@ function processGame(game) {
   }
 
   var report = [];
-  exportMatchInformation(game, report);
+  exportMatchInformation(gt, game, report);
 
   var allWeapons = { gt: "GAUNTLET", mg: "MACHINEGUN", sg: "SHOTGUN", gl: "GRENADE", rl: "ROCKET", lg: "LIGHTNING", rg: "RAILGUN", pg: "PLASMA", bfg: "BFG", hmg: "HMG", cg: "CHAINGUN", ng: "NAILGUN", pm: "PROXMINE", gh: "OTHER_WEAPON" };
 
@@ -272,7 +272,7 @@ function processGame(game) {
   return postMatchReportToXonstat(addr, game, report.join("\n"));
 }
 
-function exportMatchInformation(game, report) {
+function exportMatchInformation(gt, game, report) {
   report.push("0 " + game.serverIp); // not XonStat standard
   report.push("S " + game.matchStats.SERVER_TITLE);
   report.push("I " + game.matchStats.MATCH_GUID);
