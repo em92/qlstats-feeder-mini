@@ -12,7 +12,9 @@
  The script monitors changes to the config file and automatically 
  connects to added servers and disconnects from removed servers.
 
- Reconnecting to ZeroMQ is handled internally by the zmq sockets.
+ Reconnecting after network errors is handled internally by ZeroMQ.
+ When QL fails and becomes silent, this code will reconnect after an idle timeout.
+
 */
 
 "use strict";
@@ -27,13 +29,88 @@ var
 
 var MonitorInterval = 1000; // interval for checking connection status
 var IpPortPassRegex = /^((?:[0-9]{1,3}\.){3}[0-9]{1,3}):([0-9]+)(?:\/(.*))?$/;  // IP:port/pass
+var IdleReconnectTimeout = 1 * 60 * 1000; // reconnect to idle servers after 15min (QL stops sending data at some point)
 
 var __dirname; // current working directory (defined by node.js)
 var _logger; // log4js logger
 var _config; // config data from cfg.json
-var _zmqConnections = {}; // dictionary with IP:port => zqm socket
+var _zmqConnections = {}; // dictionary with IP:port => ZqmConnection
 
-main();
+function StatsConnection(ip, port, pass, onZmqMessageCallback) { 
+  this.ip = ip;
+  this.port = port;
+  this.pass = pass;
+  this.onZmqMessageCallback = onZmqMessageCallback;
+
+  this.addr = ip + ":" + port;
+  this.matchStarted = false;
+  this.playerStats = [];
+}
+
+StatsConnection.prototype.connect = function(isReconnect) {
+  var self = this;
+
+  this.sub = zmq.socket("sub");
+  if (this.pass) {
+    this.sub.sap_domain = "stats";
+    this.sub.plain_username = "stats";
+    this.sub.plain_password = this.pass;
+  }
+
+  //_logger.debug(self.addr + ": trying to connect");
+  var failAttempt = 0;
+  this.sub.on("connect", function () {
+    if (isReconnect)
+      _logger.debug(self.addr + ": reconnected successfully");
+    else
+      _logger.info(self.addr + ": connected successfully");
+    failAttempt = 0;
+    self.resetIdleTimeout();
+  });
+  this.sub.on("connect_delay", function () {
+    if (failAttempt++ == 1)
+      _logger.warn(self.addr + ": failed to connect, but will keep trying...");
+  });
+  this.sub.on("connect_retry", function() {
+    if (failAttempt % 40 == 0)
+      _logger.debug(self.addr + ": retrying to connect");
+  });
+  this.sub.on("message", function(data) {
+    self.onZmqMessageCallback(self, data);
+    self.resetIdleTimeout();
+  });
+  this.sub.on("disconnect", function() {
+    _logger.warn(self.addr + ": disconnected");
+    failAttempt = 0;
+  });
+  this.sub.on("monitor_error", function() {
+    _logger.error(self.addr + ": error monitoring network status");
+    setTimeout(function () { self.sub.monitor(MonitorInterval, 0); });
+  });
+
+  this.sub.monitor(MonitorInterval, 0);
+  this.sub.connect("tcp://" + this.addr);
+  this.sub.subscribe("");
+}
+
+StatsConnection.prototype.resetIdleTimeout = function () {
+  var self = this;
+  clearTimeout(this.idleTimeout);
+  this.idleTimeout = setTimeout(function () { self.onIdleTimeout(); }, IdleReconnectTimeout);
+}
+
+StatsConnection.prototype.onIdleTimeout = function () {
+  _logger.debug(this.addr + ": reconnecting to idle server");
+  this.disconnect();
+  this.connect(true);
+}
+
+StatsConnection.prototype.disconnect = function() {
+  try { this.sub.disconnect(); } catch (err) { }
+  try { this.sub.close();} catch (err) { }
+  try { this.sub.unmonitor(); } catch (err) { }
+}
+
 
 function main() {
   _logger = log4js.getLogger("feeder");
@@ -104,6 +181,7 @@ function connectToServerList(servers) {
   // create a new dictionary with the zmq connections for the new server list
   // after the loop _zmqConnections only contains servers which are no longer configured
   var newZmqConnections = {};
+  var conn;
   for (var i = 0; i < servers.length; i++) {
     var server = servers[i];
     var match = IpPortPassRegex.exec(server);
@@ -116,78 +194,49 @@ function connectToServerList(servers) {
     var port = match[2];
     var pass = match[3];
     var addr = ip + ":" + port;
-    var sub = _zmqConnections[addr];
-    if (sub && pass == sub.plain_password)
+    conn = _zmqConnections[addr];
+    if (conn && pass == conn.pass)
       delete _zmqConnections[addr];
-    else
-      sub = connectToZmq(ip, port, pass);   
-    newZmqConnections[addr] = sub;
+    else {
+      conn = new StatsConnection(ip, port, pass, onZmqMessageCallback);
+      conn.connect();
+    }
+    newZmqConnections[addr] = conn;
   }
 
   // shut down connections to servers which are no longer in the config
   for (var addr in _zmqConnections) {
     if (!_zmqConnections.hasOwnProperty(addr)) continue;
-    var sub = _zmqConnections[addr];
+    conn = _zmqConnections[addr];
     _logger.info(addr + ": disconnected. Server was removed from config.");
-    try { sub.disconnect(); } catch (err) { }
-    try { sub.close(); } catch (err) { }
-    try { sub.unmonitor(); } catch (err) { }
+    conn.disconnect();
   }
 
   _zmqConnections = newZmqConnections;
 }
 
-function connectToZmq(ip, port, pass) {
-  var addr = ip + ":" + port;
-
-  var sub = zmq.socket("sub");
-  if (pass) {
-    sub.sap_domain = "stats";
-    sub.plain_username = "stats";
-    sub.plain_password = pass;
-  }
-
-  _logger.debug(addr + ": trying to connect");
-  var failAttempt = 0;
-  var context = { addr: addr, ip: ip, port: port, matchStarted: false, playerStats: [] }
-  sub.on("message", function(data) { onZmqMessage(context, data) });
-  sub.on("connect", function () { _logger.info(addr + ": connected successfully"); failAttempt = 0; });
-  sub.on("connect_delay", function () {
-    if (failAttempt++ == 1)
-      _logger.warn(addr + ": failed to connect, but will keep trying...");
-  });
-  sub.on("connect_retry", function () { if (failAttempt % 40 == 0) _logger.debug(addr + ": retrying to connect"); });
-  sub.on("disconnect", function () { _logger.warn(addr + ": disconnected"); failAttempt = 0; });
-  sub.on("monitor_error", function() { _logger.error(addr + ": error monitoring network status"); setTimeout(function() { sub.monitor(MonitorInterval, 0); }); });
-
-  sub.monitor(MonitorInterval, 0);
-  sub.connect("tcp://" + addr);
-  sub.subscribe("");
-  return sub;
-}
-
-function onZmqMessage(context, data) {
+function onZmqMessageCallback(conn, data) {
   var msg = data.toString();
   var obj = JSON.parse(msg);
-  _logger.debug(context.addr + ": received ZMQ message: " + obj.TYPE);
+  _logger.debug(conn.addr + ": received ZMQ message: " + obj.TYPE);
   if (obj.TYPE == "MATCH_STARTED") {
-    _logger.debug(context.addr + ": match started");
-    context.matchStarted = true;
+    _logger.debug(conn.addr + ": match started");
+    conn.matchStarted = true;
   }
   else if (obj.TYPE == "PLAYER_STATS") {
     if (!obj.DATA.WARMUP)
-      context.playerStats.push(obj.DATA);
+      conn.playerStats.push(obj.DATA);
   }
   else if (obj.TYPE == "MATCH_REPORT") {
-    _logger.debug(context.addr + ": match finished");
+    _logger.debug(conn.addr + ": match finished");
     var stats = {
-      serverIp: context.ip,
-      serverPort: context.port,
+      serverIp: conn.ip,
+      serverPort: conn.port,
       gameEndTimestamp: Math.round(new Date().getTime() / 1000),
       matchStats: obj.DATA,
-      playerStats: context.playerStats
+      playerStats: conn.playerStats
     };
-    context.playerStats = [];
+    conn.playerStats = [];
     processMatch(stats);
   }
 }
@@ -384,3 +433,5 @@ function postMatchReportToXonstat(addr, game, report) {
     });
   return defer.promise;
 }
+
+main();
