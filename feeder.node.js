@@ -34,7 +34,7 @@ var IdleReconnectTimeout = 15 * 60 * 1000; // reconnect to idle servers after 15
 var __dirname; // current working directory (defined by node.js)
 var _logger; // log4js logger
 var _config; // config data from cfg.json
-var _zmqConnections = {}; // dictionary with IP:port => ZqmConnection
+var _statsConnections = {}; // dictionary with IP:port => StatsConnection
 
 function StatsConnection(ip, port, pass, onZmqMessageCallback) { 
   this.ip = ip;
@@ -125,16 +125,16 @@ function main() {
       feedJsonFile(process.argv[i]);
   } else {
     connectToServerList(_config.feeder.servers);
-	var timer;
+  var timer;
     fs.watch(__dirname + "/cfg.json", function () {
-	  // execute the reload after a delay to give an editor the chance to delete/truncate/write/flush/close/release the file
+    // execute the reload after a delay to give an editor the chance to delete/truncate/write/flush/close/release the file
       if (timer)
         clearTimeout(timer);
-	  timer = setTimeout(function() {
+    timer = setTimeout(function() {
         timer = undefined;
         if (reloadConfig())
           connectToServerList(_config.feeder.servers);
-	  }, 500);
+    }, 500);
     });
   }
 }
@@ -180,7 +180,7 @@ function connectToServerList(servers) {
   }
 
   // create a new dictionary with the zmq connections for the new server list
-  // after the loop _zmqConnections only contains servers which are no longer configured
+  // after the loop _statsConnections only contains servers which are no longer configured
   var newZmqConnections = {};
   var conn;
   for (var i = 0; i < servers.length; i++) {
@@ -195,9 +195,9 @@ function connectToServerList(servers) {
     var port = match[2];
     var pass = match[3];
     var addr = ip + ":" + port;
-    conn = _zmqConnections[addr];
+    conn = _statsConnections[addr];
     if (conn && pass == conn.pass)
-      delete _zmqConnections[addr];
+      delete _statsConnections[addr];
     else {
       conn = new StatsConnection(ip, port, pass, onZmqMessageCallback);
       conn.connect();
@@ -206,14 +206,14 @@ function connectToServerList(servers) {
   }
 
   // shut down connections to servers which are no longer in the config
-  for (var addr in _zmqConnections) {
-    if (!_zmqConnections.hasOwnProperty(addr)) continue;
-    conn = _zmqConnections[addr];
+  for (var addr in _statsConnections) {
+    if (!_statsConnections.hasOwnProperty(addr)) continue;
+    conn = _statsConnections[addr];
     _logger.info(addr + ": disconnected. Server was removed from config.");
     conn.disconnect();
   }
 
-  _zmqConnections = newZmqConnections;
+  _statsConnections = newZmqConnections;
 }
 
 function onZmqMessageCallback(conn, data) {
