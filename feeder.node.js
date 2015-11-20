@@ -29,7 +29,7 @@ var
 
 var MonitorInterval = 1000; // interval for checking connection status
 var IpPortPassRegex = /^((?:[0-9]{1,3}\.){3}[0-9]{1,3}):([0-9]+)(?:\/(.*))?$/;  // IP:port/pass
-var IdleReconnectTimeout = 1 * 60 * 1000; // reconnect to idle servers after 15min (QL stops sending data at some point)
+var IdleReconnectTimeout = 15 * 60 * 1000; // reconnect to idle servers after 15min (QL stops sending data at some point)
 
 var __dirname; // current working directory (defined by node.js)
 var _logger; // log4js logger
@@ -105,10 +105,11 @@ StatsConnection.prototype.onIdleTimeout = function () {
   this.connect(true);
 }
 
-StatsConnection.prototype.disconnect = function() {
-  try { this.sub.disconnect(); } catch (err) { }
-  try { this.sub.close();} catch (err) { }
+StatsConnection.prototype.disconnect = function () {
+  //try { this.sub.unsubscribe(""); } catch (err) { }
+  try { this.sub.disconnect("tcp://" + addr); } catch (err) { }
   try { this.sub.unmonitor(); } catch (err) { }
+  try { this.sub.close(); } catch (err) { }
 }
 
 
