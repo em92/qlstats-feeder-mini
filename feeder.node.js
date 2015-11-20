@@ -1,19 +1,16 @@
 ﻿/*
- Fetch Quake Live statistics from game server ZeroMQ message queues, 
- reformat it to XonStat match report format and 
- send it to sumbission.py via HTTP POST.
+ Fetch Quake Live statistics from game server ZeroMQ message queues.
+ 
+ Optionally save the stats to .json.gz files.
+ Optionally reformat the JSON to XonStat match report format and send it to sumbission.py via HTTP POST.
+ Optionally submit saved .json.gz matches to XonStats (files specified as command line arguments)
 
- Optionally save the stats to a .json.gz file or 
- process saved files specified as command line arguments.
-
- When the submission.py server is not responding with an "ok",
- a .json.gz is saved in the <jsondir>/errors/ folder.
-
- The script monitors changes to the config file and automatically 
- connects to added servers and disconnects from removed servers.
+ The script monitors changes to the config file and automatically connects to added servers and disconnects from removed servers.
 
  Reconnecting after network errors is handled internally by ZeroMQ.
  When QL fails and becomes silent, this code will reconnect after an idle timeout.
+
+ When XonStat's submission.py server is not responding with an "ok", a .json.gz is saved in the <jsondir>/errors/ folder.
 
 */
 
@@ -107,8 +104,8 @@ StatsConnection.prototype.onIdleTimeout = function () {
 
 StatsConnection.prototype.disconnect = function () {
   //try { this.sub.unsubscribe(""); } catch (err) { }
-  try { this.sub.disconnect("tcp://" + addr); } catch (err) { }
   try { this.sub.unmonitor(); } catch (err) { }
+  try { this.sub.disconnect("tcp://" +addr); } catch (err) { }
   try { this.sub.close(); } catch (err) { }
 }
 
