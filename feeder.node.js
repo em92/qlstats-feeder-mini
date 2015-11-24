@@ -321,6 +321,7 @@ function processGame(game) {
 
 function exportMatchInformation(gt, game, report) {
   report.push("0 " + game.serverIp); // not XonStat standard
+  report.push("1 " + game.gameEndTimestamp); // not XonStat standard
   report.push("S " + game.matchStats.SERVER_TITLE);
   report.push("I " + game.matchStats.MATCH_GUID);
   report.push("G " + gt);
@@ -356,7 +357,7 @@ function exportScoreboard(gt, game, team, isWinnerTeam, weapons, report) {
       report.push("t " + team);
     report.push("e matches 1");
     report.push("e scoreboardvalid 1");
-    report.push("e alivetime " + Math.min(p.PLAY_TIME, game.matchStats.MATCH_LENGTH));
+    report.push("e alivetime " + Math.min(p.PLAY_TIME, game.matchStats.GAME_LENGTH));
     report.push("e rank " + p.RANK);
     if ((team == 0 && p.RANK == "1") || isWinnerTeam)
       report.push("e wins 1");
