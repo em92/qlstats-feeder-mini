@@ -302,13 +302,13 @@ function processGame(game) {
 
   var ok = false;
   if ("ffa,duel,race".indexOf(gt) >= 0)
-    ok = exportScoreboard(gt, game.playerStats, 0, true, allWeapons, report);
+    ok = exportScoreboard(gt, game, 0, true, allWeapons, report);
   else if ("ca,tdm,ctf,ft".indexOf(gt) >= 0) {
     var redWon = parseInt(game.matchStats.TSCORE0) > parseInt(game.matchStats.TSCORE1);
-    ok = exportTeamSummary(gt, game.matchStats, 1, report)
-      && exportScoreboard(gt, game.playerStats, 1, redWon, allWeapons, report)
-      && exportTeamSummary(gt, game.matchStats, 2, report)
-      && exportScoreboard(gt, game.playerStats, 2, !redWon, allWeapons, report);
+    ok = exportTeamSummary(gt, game, 1, report)
+      && exportScoreboard(gt, game, 1, redWon, allWeapons, report)
+      && exportTeamSummary(gt, game, 2, report)
+      && exportScoreboard(gt, game, 2, !redWon, allWeapons, report);
   }
 
   if (!ok) {
@@ -332,10 +332,11 @@ function exportMatchInformation(gt, game, report) {
   report.push("D " + game.matchStats.GAME_LENGTH);
 }
 
-function exportScoreboard(gt, scoreboard, team, isWinnerTeam, weapons, report) {
+function exportScoreboard(gt, game, team, isWinnerTeam, weapons, report) {
   var playerMapping = { SCORE: "score", KILLS: "kills", DEATHS: "deaths" };
   var damageMapping = { DEALT: "pushes", TAKEN: "destroyed" };
   var medalMapping = { CAPTURES: "captured", ASSISTS: "returns" };
+  var scoreboard = game.playerStats;
 
   if (!scoreboard || !scoreboard.length || scoreboard.length < 2) {
     _logger.debug("not enough players in team " + team);
@@ -355,7 +356,7 @@ function exportScoreboard(gt, scoreboard, team, isWinnerTeam, weapons, report) {
       report.push("t " + team);
     report.push("e matches 1");
     report.push("e scoreboardvalid 1");
-    report.push("e alivetime " + p.PLAY_TIME);
+    report.push("e alivetime " + Math.min(p.PLAY_TIME, game.matchStats.MATCH_LENGTH));
     report.push("e rank " + p.RANK);
     if ((team == 0 && p.RANK == "1") || isWinnerTeam)
       report.push("e wins 1");
@@ -380,8 +381,9 @@ function exportScoreboard(gt, scoreboard, team, isWinnerTeam, weapons, report) {
   return true;
 }
 
-function exportTeamSummary(gt, matchstats, team, data) {
+function exportTeamSummary(gt, game, team, data) {
   var mapping = { CAPTURES: "caps", SCORE: "score", ROUNDS_WON: "rounds" };
+  var matchstats = game.matchStats;
   var score = matchstats["TSCORE" + (team - 1)];
   var info = {};
   if (gt == "ctf")
