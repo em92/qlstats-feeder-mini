@@ -1,0 +1,80 @@
+﻿<html>
+<head>
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/2.1.4/jquery.min.js"></script>
+
+  <style type="text/css">
+     body { background-color: #222;}
+     body,p,td { font-family: Segoe UI, Tahoma, Helvetica, Sans-Serif;color: white; }
+    td { padding-left: 5px;padding-right: 5px;}
+    td.busy { color: greenyellow; }
+    td.connected { color: green; }
+    td.connecting { color: gray; }
+    td.badPassword { color: orange; }
+    td.disconnected { color: red; }
+    #serverList td:hover { cursor: pointer; }
+    #serverList { margin-top: 50px; }
+  </style>
+
+  <script language="javascript" type="text/javascript">
+    $.getJSON("/api/servers", function (servers) {
+      var prevIp = "";
+      var $list = $("#serverList");
+      var $row;
+      var now = Date.now();
+      var counts = { total: 0, busy: 0, connected: 0, connecting: 0, badPassword: 0, disconnected: 0 };
+      servers.forEach(function (server) {
+        if (server.ip != prevIp) {
+          $row = $("<tr><td>" + server.owner + "</td><td>" + server.ip + "</td>");
+          $list.append($row);
+          prevIp = server.ip;
+        }
+        var cssClass = now - server.lastMessageUtc <= 60000 ? "busy" : server.status;
+        $row.append("<td class='" + cssClass + "'>" + server.port + "</td>");
+        if (counts[cssClass])
+          ++counts[cssClass];
+        else
+          counts[cssClass] = 1;
+        ++counts.total;
+      });
+      for (var key in counts) {
+        if (counts.hasOwnProperty(key))
+          $("#counts ." + key).text(counts[key]);
+      }
+    });
+  </script>
+</head>
+
+<body>
+
+<h1>qlstats.net Game Server Status</h1>
+
+<table>
+  <tr>
+    <td class="total">total</td>
+    <td class="busy">active</td>
+    <td class="connected">idle</td>
+    <td class="connecting">connecting</td>
+    <td class="badPassword">bad password</td>
+    <td class="disconnected">can't connect</td>
+  </tr>
+  <tr id="counts">
+    <td class="total"></td>
+    <td class="busy"></td>
+    <td class="connected"></td>
+    <td class="connecting"></td>
+    <td class="badPassword"></td>
+    <td class="disconnected"></td>
+  </tr>
+</table>
+
+<table id="serverList">
+  <thead>
+  <tr>
+    <th>Owner</th>
+    <th>IP</th>
+    <th>Ports</th>
+  </tr>
+  </thead>
+</table>
+</body>
+</html>

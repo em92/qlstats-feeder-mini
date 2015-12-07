@@ -21,98 +21,26 @@ var
   request = require("request"),
   log4js = require("log4js"),
   zlib = require("zlib"),
-  zmq = require("zmq"),
   Q = require("q");
 
-var MonitorInterval = 1000; // interval for checking connection status
-var IpPortPassRegex = /^((?:[0-9]{1,3}\.){3}[0-9]{1,3}):([0-9]+)(?:\/(.*))?$/;  // IP:port/pass
-var IdleReconnectTimeout = 15 * 60 * 1000; // reconnect to idle servers after 15min (QL stops sending data at some point)
+var
+  StatsConnection = require("./statsconn"),
+  webadmin = require ("./webadmin");
+
+
+var IpPortPassRegex = /^(?:([^:]*):)?((?:[0-9]{1,3}\.){3}[0-9]{1,3}):([0-9]+)(?:\/(.*))?$/;  // IP:port/pass
 
 var __dirname; // current working directory (defined by node.js)
 var _logger; // log4js logger
 var _config; // config data from cfg.json
 var _statsConnections = {}; // dictionary with IP:port => StatsConnection
 
-function StatsConnection(ip, port, pass, onZmqMessageCallback) { 
-  this.ip = ip;
-  this.port = port;
-  this.pass = pass;
-  this.onZmqMessageCallback = onZmqMessageCallback;
-
-  this.addr = ip + ":" + port;
-  this.matchStarted = false;
-  this.playerStats = [];
-}
-
-StatsConnection.prototype.connect = function(isReconnect) {
-  var self = this;
-
-  this.sub = zmq.socket("sub");
-  if (this.pass) {
-    this.sub.sap_domain = "stats";
-    this.sub.plain_username = "stats";
-    this.sub.plain_password = this.pass;
-  }
-
-  //_logger.debug(self.addr + ": trying to connect");
-  var failAttempt = 0;
-  this.sub.on("connect", function () {
-    if (isReconnect)
-      _logger.debug(self.addr + ": reconnected successfully");
-    else
-      _logger.info(self.addr + ": connected successfully");
-    failAttempt = 0;
-    self.resetIdleTimeout();
-  });
-  this.sub.on("connect_delay", function () {
-    if (failAttempt++ == 1)
-      _logger.warn(self.addr + ": failed to connect, but will keep trying...");
-  });
-  this.sub.on("connect_retry", function() {
-    if (failAttempt % 40 == 0)
-      _logger.debug(self.addr + ": retrying to connect");
-  });
-  this.sub.on("message", function(data) {
-    self.onZmqMessageCallback(self, data);
-    self.resetIdleTimeout();
-  });
-  this.sub.on("disconnect", function() {
-    _logger.warn(self.addr + ": disconnected");
-    failAttempt = 0;
-  });
-  this.sub.on("monitor_error", function() {
-    _logger.error(self.addr + ": error monitoring network status");
-    setTimeout(function () { self.sub.monitor(MonitorInterval, 0); });
-  });
-
-  this.sub.monitor(MonitorInterval, 0);
-  this.sub.connect("tcp://" + this.addr);
-  this.sub.subscribe("");
-}
-
-StatsConnection.prototype.resetIdleTimeout = function () {
-  var self = this;
-  clearTimeout(this.idleTimeout);
-  this.idleTimeout = setTimeout(function () { self.onIdleTimeout(); }, IdleReconnectTimeout);
-}
-
-StatsConnection.prototype.onIdleTimeout = function () {
-  _logger.debug(this.addr + ": reconnecting to idle server");
-  this.disconnect();
-  this.connect(true);
-}
-
-StatsConnection.prototype.disconnect = function () {
-  //try { this.sub.unsubscribe(""); } catch (err) { }
-  try { this.sub.unmonitor(); } catch (err) { }
-  try { this.sub.disconnect("tcp://" +addr); } catch (err) { }
-  try { this.sub.close(); } catch (err) { }
-}
 
 
 function main() {
   _logger = log4js.getLogger("feeder");
   Q.longStackSupport = false; // enable if you have to trace a problem, but it has a HUGE performance penalty
+  StatsConnection.setLogger(_logger);  
 
   reloadConfig();
 
@@ -122,19 +50,23 @@ function main() {
       feedJsonFile(process.argv[i]);
   } else {
     connectToServerList(_config.feeder.servers);
-  var timer;
+    var timer;
     fs.watch(__dirname + "/cfg.json", function () {
-    // execute the reload after a delay to give an editor the chance to delete/truncate/write/flush/close/release the file
+      // execute the reload after a delay to give an editor the chance to delete/truncate/write/flush/close/release the file
       if (timer)
         clearTimeout(timer);
-    timer = setTimeout(function() {
+      timer = setTimeout(function() {
         timer = undefined;
         if (reloadConfig())
           connectToServerList(_config.feeder.servers);
-    }, 500);
+      }, 500);
     });
+
+    webadmin.setStatsConnectionProvider(function() { return _statsConnections; });
+    webadmin.startHttpd(_config.webadmin);
   }
 }
+
 
 function reloadConfig() {
   try {
@@ -188,15 +120,18 @@ function connectToServerList(servers) {
       continue;
     }
 
-    var ip = match[1];
-    var port = match[2];
-    var pass = match[3];
+    var owner = match[1];
+    var ip = match[2];
+    var port = match[3];
+    var pass = match[4];
     var addr = ip + ":" + port;
     conn = _statsConnections[addr];
-    if (conn && pass == conn.pass)
+    if (conn && pass == conn.pass) {
+      conn.owner = owner;
       delete _statsConnections[addr];
+    }
     else {
-      conn = new StatsConnection(ip, port, pass, onZmqMessageCallback);
+      conn = StatsConnection.create(owner, ip, port, pass, onZmqMessageCallback);
       conn.connect();
     }
     newZmqConnections[addr] = conn;
@@ -336,7 +271,7 @@ function exportMatchInformation(gt, game, report) {
 function exportScoreboard(gt, game, team, isWinnerTeam, weapons, report) {
   var playerMapping = { SCORE: "score", KILLS: "kills", DEATHS: "deaths" };
   var damageMapping = { DEALT: "pushes", TAKEN: "destroyed" };
-  var medalMapping = { CAPTURES: "captured", ASSISTS: "returns" };
+  var medalMapping = { CAPTURES: "captured", ASSISTS: "returns", DEFENDS: "drops" };
   var scoreboard = game.playerStats;
 
   if (!scoreboard || !scoreboard.length || scoreboard.length < 2) {
