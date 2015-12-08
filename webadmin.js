@@ -132,6 +132,8 @@ function updateServers(req) {
       result.msg += conn.addr + " updated\n";
     }
   }
-  
+
+  _feeder.writeConfig();
+
   return result;
 }

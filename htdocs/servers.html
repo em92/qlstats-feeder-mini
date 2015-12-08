@@ -150,7 +150,7 @@
       })
       .done(function (result) {
         $("#btnOk").addClass(result.ok ? "success" : "error");
-        $("#statusText").html(result.msg.replace("\n", "<br>"));
+        $("#statusText").html(result.msg.replace(/\n/g, "<br>"));
         if (result.ok) {
           fillServerList();
           if (server)

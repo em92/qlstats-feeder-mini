@@ -34,7 +34,7 @@ var __dirname; // current working directory (defined by node.js)
 var _logger; // log4js logger
 var _config; // config data from cfg.json
 var _statsConnections = {}; // dictionary with IP:port => StatsConnection
-
+var _ignoreConfigChange = false; // 
 
 
 function main() {
@@ -62,7 +62,11 @@ function main() {
       }, 500);
     });
 
-    webadmin.setStatsConnectionProvider(function() { return _statsConnections; });
+    webadmin.setFeeder({
+      getStatsConnections: function() { return _statsConnections; },
+      writeConfig: writeConfig
+    });
+  
     webadmin.startHttpd(_config.webadmin);
   }
 }
@@ -70,6 +74,11 @@ function main() {
 
 function reloadConfig() {
   try {
+    if (_ignoreConfigChange) {
+      _ignoreConfigChange = false;
+      return false;
+    }
+
     _config = JSON.parse(fs.readFileSync(__dirname + "/cfg.json"));
     if (!(_config.feeder.saveDownloadedJson || _config.feeder.importDownloadedJson)) {
       _logger.error("At least one of feeder.saveDownloadedJson or feeder.importDownloadedJson must be set in cfg.json");
@@ -87,6 +96,18 @@ function reloadConfig() {
       _logger.error("Failed to reload the server list: " + err);
     return false;
   }
+}
+
+function writeConfig() {
+  _config.feeder.servers = [];
+  for (var addr in _statsConnections) {
+    if (!_statsConnections.hasOwnProperty(addr)) continue;
+    var conn = _statsConnections[addr];
+    _config.feeder.servers.push(conn.owner + ":" + addr + "/" + conn.pass);
+  }
+
+  _ignoreConfigChange = true;
+  fs.writeFile(__dirname + "/cfg.json", JSON.stringify(_config, null, 2));
 }
 
 function feedJsonFile(file) {
