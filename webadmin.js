@@ -11,7 +11,8 @@ exports.setFeeder = setFeeder;
 var _config;
 var _feeder = {
   getStatsConnections: function() {},
-  writeConfig: function() {}
+  writeConfig: function () { },
+  addServer: function (owner, ip, port, pass) { }
 };
 
 function setFeeder(feeder) {
@@ -32,7 +33,12 @@ function startHttpd(config) {
     res.end();
   });
 
-  app.post('/api/update', function (req, res) {
+  app.post('/api/addserver', function (req, res) {
+    res.json(addServer(req.body));
+    res.end();
+  });
+
+  app.post('/api/editserver', function (req, res) {
     res.json(updateServers(req.body));
     res.end();
   });
@@ -59,6 +65,52 @@ function getServerList() {
       lastMessageUtc: item.lastMessageUtc
     };
   });
+}
+
+function addServer(req) {
+  if (req.owner && ! /^[\w\d_\-\[\]{}^|]{3,20}$/.test(req.owner))
+    return { ok: false, msg: "Invalid owner name (length or characters)" };
+
+  if (!req.newPwd1)
+    return { ok: false, msg: "ZMQ password must not be blank" };
+
+  var serverMatch = /^((?:\d+\.){3}\d+):(\d+)$/.exec(req.newAddr);
+  if (!serverMatch)
+    return { ok: false, msg: "Invalid server address (IPv4:port required)" };
+  var serverIp = serverMatch[1];
+  var serverPort = serverMatch[2];
+
+  var statsConn = _feeder.getStatsConnections();
+
+  if (statsConn[req.newAddr])
+    return { ok: false, msg: "This IP:port is already registered" };
+
+  var ownerByIp = {};
+  var passByOwner = {};
+  for (var key in statsConn) {
+    if (!statsConn.hasOwnProperty(key)) continue;
+    var conn = statsConn[key];
+    if (!ownerByIp[conn.ip])
+      ownerByIp[conn.ip] = conn.owner;
+    if (!passByOwner[conn.owner])
+      passByOwner[conn.owner] = conn.pass;
+  }
+
+  if (!req.owner && !(req.owner = ownerByIp[serverIp]))
+    return { ok: false, msg: "Owner required for new IPs" };
+
+  if (ownerByIp[serverIp] && ownerByIp[serverIp] != req.owner)
+    return { ok: false, msg: "This IP is owned by " + ownerByIp[serverIp] };
+
+  if (passByOwner[req.owner] && passByOwner[req.owner] != req.newPwd1)
+    return { ok: false, msg: "Wrong password (must match the one of your first listed server)" };
+  else if (!passByOwner[req.owner] && req.newPwd1 != req.newPwd2)
+    return { ok: false, msg: "Passwords don't match" };
+
+  var conn = _feeder.connectServer(req.owner, serverIp, serverPort, req.newPwd1);
+  statsConn[req.newAddr] = conn;
+  _feeder.writeConfig();
+  return { ok: true, msg: "Added " + req.newAddr };
 }
 
 function updateServers(req) {
@@ -119,6 +171,13 @@ function updateServers(req) {
       continue;
     }
 
+    var newAddr = (newIp || conn.ip) + ":" + (newPort || conn.port);
+    if ((newIp || newPort) && newAddr != conn.addr && statsConn[newAddr]) {
+      result.ok = false;
+      result.msg += newAddr + " is already in the list";
+      continue;
+    }
+
     if (req.newPwd1 || newIp || newPort) {
       if (req.newPwd1)
         conn.pass = req.newPwd1;
@@ -126,7 +185,7 @@ function updateServers(req) {
         conn.ip = newIp;
       if (newPort)
         conn.port = newPort;
-      conn.addr = conn.ip + ":" + conn.port;
+      conn.addr = newAddr;
       conn.disconnect();
       conn.connect();
       result.msg += conn.addr + " updated\n";

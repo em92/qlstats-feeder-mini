@@ -63,7 +63,8 @@ function main() {
     });
 
     webadmin.setFeeder({
-      getStatsConnections: function() { return _statsConnections; },
+      getStatsConnections: function () { return _statsConnections; },
+      connectServer: connectServer,
       writeConfig: writeConfig
     });
   
@@ -151,10 +152,9 @@ function connectToServerList(servers) {
       conn.owner = owner;
       delete _statsConnections[addr];
     }
-    else {
-      conn = StatsConnection.create(owner, ip, port, pass, onZmqMessageCallback);
-      conn.connect();
-    }
+    else
+      conn = connectServer(owner, ip, port, pass);
+    
     newZmqConnections[addr] = conn;
   }
 
@@ -167,6 +167,12 @@ function connectToServerList(servers) {
   }
 
   _statsConnections = newZmqConnections;
+}
+
+function connectServer(owner, ip, port, pass) {
+  var conn = StatsConnection.create(owner, ip, port, pass, onZmqMessageCallback);
+  conn.connect();
+  return conn;
 }
 
 function onZmqMessageCallback(conn, data) {
