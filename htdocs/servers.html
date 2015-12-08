@@ -5,43 +5,21 @@
   <style type="text/css">
      body { background-color: #222;}
      body,p,td { font-family: Segoe UI, Tahoma, Helvetica, Sans-Serif;color: white; }
+    a.owner, a.host, a.port { cursor: pointer; }
     td { padding-left: 5px;padding-right: 5px;}
     td.busy { color: greenyellow; }
     td.connected { color: green; }
     td.connecting { color: gray; }
     td.badPassword { color: orange; }
     td.disconnected { color: red; }
-    #serverList td:hover { cursor: pointer; }
     #serverList { margin-top: 50px; }
+    #adminForm { display: none;position: fixed;top: 30px;right: 30px;width: 600px;min-height: 300px;background-color: #444;padding: 20px;}
+    div.button {cursor: pointer; padding: 5px 20px 5px 20px;display: inline-block;background-color: #888;margin-right: 20px;}
+    #buttons { margin-top: 40px;}
+    #statusText { margin-top: 20px;}
+    div.button.success { background-color: #080;}
+    div.button.error { background-color: #800;}
   </style>
-
-  <script language="javascript" type="text/javascript">
-    $.getJSON("/api/servers", function (servers) {
-      var prevIp = "";
-      var $list = $("#serverList");
-      var $row;
-      var now = Date.now();
-      var counts = { total: 0, busy: 0, connected: 0, connecting: 0, badPassword: 0, disconnected: 0 };
-      servers.forEach(function (server) {
-        if (server.ip != prevIp) {
-          $row = $("<tr><td>" + server.owner + "</td><td>" + server.ip + "</td>");
-          $list.append($row);
-          prevIp = server.ip;
-        }
-        var cssClass = now - server.lastMessageUtc <= 60000 ? "busy" : server.status;
-        $row.append("<td class='" + cssClass + "'>" + server.port + "</td>");
-        if (counts[cssClass])
-          ++counts[cssClass];
-        else
-          counts[cssClass] = 1;
-        ++counts.total;
-      });
-      for (var key in counts) {
-        if (counts.hasOwnProperty(key))
-          $("#counts ." + key).text(counts[key]);
-      }
-    });
-  </script>
 </head>
 
 <body>
@@ -76,5 +54,124 @@
   </tr>
   </thead>
 </table>
+
+<div id="adminForm">
+  <h2 id="formTitle"></h2>
+
+  <table>
+    <tr><td>Current ZMQ Stats Password:</td><td><input id="pwd0" type="text" size="20"/></td><td>(required)</td></tr>
+    <tr><td>&nbsp;</td></tr>
+    <tr><td>New ZMQ Stats Password:</td><td><input id="pwd1" type="text" size="20"/></td><td>(leave blank to keep as-is)</td></tr>
+    <tr><td>Repeat Password:</td><td><input id="pwd2" type="text" size="20"/></td></tr>
+    <tr><td>&nbsp;</td></tr>
+    <tr><td>New Server Address:</td><td><input id="addr" type="text" size="20"/></td><td><div id="btnDelete" class="button">Delete Server(s)</div></td></tr>
+  </table>
+  <div id="buttons">
+    <div id="btnOk" class="button">Submit</div>
+    <div id="btnClose" class="button">Close</div>
+  </div>
+  <div id="statusText"></div>
+</div>
+
+
+<script language="javascript" type="text/javascript">
+  
+  function fillServerList() {
+    $.getJSON("/api/servers", function(servers) {
+      var prevIp = "", prevOwner = "";
+      var $list = $("#serverList");
+      var $row;
+      var now = Date.now();
+      var counts = { total: 0, busy: 0, connected: 0, connecting: 0, badPassword: 0, disconnected: 0 };
+      $("#serverList tbody").html("");
+      servers.forEach(function (server) {
+        if (server.ip != prevIp) {
+          var owner = server.owner != prevOwner ? "<a class='owner'>" + server.owner + "</a>" : "";
+          $row = $("<tr><td>" + owner + "</td><td><a class='host'>" + server.ip + "</a></td>");
+          $list.append($row);
+          prevIp = server.ip;
+          prevOwner = server.owner;
+        }
+        var cssClass = now - server.lastMessageUtc <= 60000 ? "busy" : server.status;
+        $row.append("<td class='" + cssClass + "'><a class='port'>" + server.port + "</a></td>");
+        if (counts[cssClass])
+          ++counts[cssClass];
+        else
+          counts[cssClass] = 1;
+        ++counts.total;
+      });
+      for (var key in counts) {
+        if (counts.hasOwnProperty(key))
+          $("#counts ." + key).text(counts[key]);
+      }
+
+      $("#serverList tbody").find("tr").append("<td><a class='port'>+</a></td>");
+
+      $(".owner").click(function() { manage("owner", $(this).text()); });
+      $(".host").click(function() { manage("host", $(this).text()); });
+      $(".port").click(function() { manage("port", $(this).parents("tr").find("td:eq(1)").find("a").text() + ":" + $(this).text()); });
+    });
+  }
+
+  var server, owner;
+  function manage(type, value) {
+    setOwnerServerTitle(type, value);
+    $("#btnOk").removeClass("success error");
+    $("#statusText").text("");
+    $("#adminForm").css("display", "block");
+    $("#addr").val(type != "owner" ? value : "*");
+  }
+
+  function setOwnerServerTitle(type, value) {
+    owner = type == "owner" ? value : null;
+    server = type != "owner" ? value : null;    
+    var title = type == "owner" ? "All servers owned by" : type == "host" ? "All servers on" : "Server";
+    $("#formTitle").text(title + " " + value);
+  }
+
+  function submitUpdateForm(action) {
+    var data = {
+      action: action,
+      owner: owner,
+      server: server,
+      oldPwd: $("#pwd0").val(),
+      newPwd1: $("#pwd1").val(),
+      newPwd2: $("#pwd2").val(),
+      newAddr: $("#addr").val().trim('*')
+  }
+
+    $("#statusText").text("");
+    $("#btnOk").removeClass("success error");
+    $.ajax("/api/update", {
+        data: JSON.stringify(data),
+        contentType: "application/json",
+        type: "POST",
+        dataType: "json"
+      })
+      .done(function (result) {
+        $("#btnOk").addClass(result.ok ? "success" : "error");
+        $("#statusText").html(result.msg.replace("\n", "<br>"));
+        if (result.ok) {
+          fillServerList();
+          if (server)
+            setOwnerServerTitle(data.newAddr.indexOf(":") < 0 ? "host" : "port", data.newAddr);
+        }
+      })
+      .fail(function (x, s, e) {
+        $("#btnOk").addClass("error");
+        $("#statusText").text(e);
+      });
+  }
+
+  fillServerList();
+  $("#btnClose").click(function () { $("#adminForm").css("display", "none") });
+  $("#btnOk").click(function () { submitUpdateForm("update"); });
+  $("#btnDelete").click(function () {
+    if (server.indexOf(':') > 0 || confirm("Are you sure that you want to delete\n" + $("#formTitle").text() + "?"))
+      submitUpdateForm("delete");
+  });
+
+</script>
+
 </body>
 </html>
