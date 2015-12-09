@@ -68,7 +68,7 @@ function main() {
       writeConfig: writeConfig
     });
   
-    webadmin.startHttpd(_config.webadmin);
+    webadmin.startHttpd(_config);
   }
 }
 

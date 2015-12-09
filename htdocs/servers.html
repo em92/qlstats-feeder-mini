@@ -6,7 +6,7 @@
     body { background-color: #222;}
     body,p,td { font-family: Segoe UI, Tahoma, Helvetica, Sans-Serif;color: white; }
     a.owner, a.host, a.port, a.add { cursor: pointer; }
-    td { padding-left: 5px;padding-right: 5px;}
+    td { padding: 0 5px 0 5px;}
     td.busy { color: greenyellow; }
     td.connected { color: green; }
     td.connecting { color: gray; }
@@ -19,6 +19,7 @@
     #addStatusText, #editstatusText { margin-top: 20px;}
     div.button.success { background-color: #080;}
     div.button.error { background-color: #800;}
+    .mtop td { padding-top: 10px; }
   </style>
 </head>
 
@@ -65,10 +66,10 @@
   <table>
     <tr><td>Owner (IRC nickname):</td><td><input id="addOwner" type="text" size="20" /></td><td>(required for new IPs)</td></tr>
     <tr><td>&nbsp;</td></tr>
-    <tr><td>ZMQ Stats Password:</td><td><input id="addPwd1" type="text" size="20" /></td><td>(of your first server)</td></tr>
+    <tr><td>ZMQ Stats Password:</td><td><input id="addPwd1" type="text" size="20" /></td><td>(of your first listed server)</td></tr>
     <tr><td>Repeat Password:</td><td><input id="addPwd2" type="text" size="20" /></td><td>(required for new owners)</td></tr>
     <tr><td>&nbsp;</td></tr>
-    <tr><td>New Server Address:</td><td><input id="addAddr" type="text" size="20"/></td><td>(IPv4:port)</td></tr>
+    <tr><td>Server Address:</td><td><input id="addAddr" type="text" size="20"/></td><td>(IPv4:port)</td></tr>
   </table>
   <div class="buttons">
     <div id="addBtnOk" class="button">Submit</div>
@@ -109,8 +110,12 @@
       $("#serverList tbody").html("");
       servers.forEach(function (server) {
         if (server.ip != prevIp) {
-          var owner = server.owner != prevOwner ? "<a class='owner'>" + server.owner + "</a>" : "";
-          $row = $("<tr><td>" + owner + "</td><td><a class='host'>" + server.ip + "</a></td>");
+          var owner = "", clazz = "";
+          if (server.owner != prevOwner) {
+            clazz = " class='mtop'";
+            owner = "<a class='owner'>" + server.owner + "</a>";
+          }
+          $row = $("<tr" + clazz + "><td>" + owner + "</td><td><a class='host'>" + server.ip + "</a></td>");
           $list.append($row);
           prevIp = server.ip;
           prevOwner = server.owner;

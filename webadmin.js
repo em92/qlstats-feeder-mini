@@ -3,7 +3,9 @@
   app = express(),
   http = require("http"),
   server = http.createServer(app),
-  bodyParser = require("body-parser");
+  bodyParser = require("body-parser"),
+  fs = require("graceful-fs"),
+  Q = require("q");
 
 exports.startHttpd = startHttpd;
 exports.setFeeder = setFeeder;
@@ -20,30 +22,48 @@ function setFeeder(feeder) {
 }
 
 function startHttpd(config) {
-  if (!config.enabled)
+  if (!config.webadmin.enabled)
     return;
 
   _config = config;
 
-  app.use(express.static(__dirname + '/htdocs'));
+  app.use(express.static(__dirname + "/htdocs"));
   app.use(bodyParser.json());
 
-  app.get('/api/servers', function (req, res) {
+  app.get("/", function(req, res) {
+    res.redirect("/servers.html");
+  });
+
+  app.get("/api/servers", function (req, res) {
     res.jsonp(getServerList());
     res.end();
   });
 
-  app.post('/api/addserver', function (req, res) {
+  app.post("/api/addserver", function (req, res) {
     res.json(addServer(req.body));
     res.end();
   });
 
-  app.post('/api/editserver', function (req, res) {
+  app.post("/api/editserver", function (req, res) {
     res.json(updateServers(req.body));
     res.end();
   });
 
-  app.listen(_config.port);
+  app.get("/api/jsons/:date", function(req, res) {
+    Q(listJsons(req))
+      .then(function (result) { res.json(result); })
+      .catch(function (err) { res.json({ ok: false, msg: "internal error: " + err }); })
+      .finally(function () { res.end(); });
+  });
+
+  app.get("/api/jsons/:date/:file.json(.gz)?", function (req, res) {
+    Q(getJson(req, res))
+      .catch(function (err) { res.json({ ok: false, msg: "internal error: " + err }); })
+      .finally(function () { res.end(); });
+  });
+
+
+  app.listen(_config.webadmin.port);
 }
 
 function getServerList() {
@@ -147,7 +167,6 @@ function updateServers(req) {
     // TODO: check if someone else already owns the IP or IP:port
   }
 
-  //console.log("action=" + req.action + ", owner=" + req.owner + ", server=" + req.server + ", serverIp=" + serverIp + ", serverPort=" + serverPort);
 
   var statsConn = _feeder.getStatsConnections();
   var result = { ok: true, msg: "" };
@@ -195,4 +214,32 @@ function updateServers(req) {
   _feeder.writeConfig();
 
   return result;
+}
+
+function listJsons(req) {
+  var ts = Date.parse(req.params.date);
+  if (ts == NaN || !ts)
+    return { ok: false, msg: "Date must be provided in YYYY-MM-DD format" };
+  var date = new Date(ts);
+  var dir = __dirname + "/" + _config.feeder.jsondir + "/" + date.getUTCFullYear() + "-" + ("0" + (date.getUTCMonth() + 1)).substr(-2) + "/" + ("0" + date.getUTCDate()).substr(-2);
+  return Q
+    .nfcall(fs.readdir, dir)
+    .then(function (files) { return { ok: true, files: files.map(function (name) { return name.substr(0, name.indexOf(".json")) }) }; })
+    .catch(function () { return { ok: false, msg: "File not found" } });
+}
+
+function getJson(req, res) {
+  var ts = Date.parse(req.params.date);
+  if (ts == NaN || !ts)
+    return Q(res.json({ ok: false, msg: "Date must be provided in YYYY-MM-DD format" }));
+
+  var date = new Date(ts);
+  var dir = __dirname + "/" + _config.feeder.jsondir + "/" + date.getUTCFullYear() + "-" + ("0" + (date.getUTCMonth() + 1)).substr(-2) + "/" + ("0" + date.getUTCDate()).substr(-2) + "/";
+  var asGzip = req.path.substr(-3) == ".gz";
+  var options = {
+    root: dir,
+    dotfiles: "deny",
+    headers: asGzip ? {} : { "Content-Type": "application/json", "Content-Encoding": "gzip" }
+  };
+  return Q.ninvoke(res, "sendFile", req.params.file + ".json.gz", options).catch(function () { return res.json({ ok: false, msg: "File not found" })});
 }
