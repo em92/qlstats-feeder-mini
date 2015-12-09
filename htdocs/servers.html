@@ -120,7 +120,7 @@
           prevIp = server.ip;
           prevOwner = server.owner;
         }
-        var cssClass = now - server.lastMessageUtc <= 60000 ? "busy" : server.status;
+        var cssClass = server.status == "connected" && now - server.lastMessageUtc <= 60000 ? "busy" : server.status;
         $row.append("<td class='" + cssClass + "'><a class='port'>" + server.port + "</a></td>");
         if (counts[cssClass])
           ++counts[cssClass];
