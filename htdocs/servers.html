@@ -19,7 +19,7 @@
     #addStatusText, #editstatusText { margin-top: 20px;}
     div.button.success { background-color: #080;}
     div.button.error { background-color: #800;}
-    .mtop td { padding-top: 10px; }
+    .mtop td { padding-top: 15px; }
   </style>
 </head>
 
@@ -205,7 +205,7 @@
       oldPwd: $("#editPwd0").val(),
       newPwd1: $("#editPwd1").val(),
       newPwd2: $("#editPwd2").val(),
-      newAddr: $("#editAddr").val().trim('*')
+      newAddr: $("#editAddr").val().replace("*", "")
     }
 
     $("#editStatusText").text("");

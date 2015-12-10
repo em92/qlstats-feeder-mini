@@ -5,12 +5,15 @@
   server = http.createServer(app),
   bodyParser = require("body-parser"),
   fs = require("graceful-fs"),
+  pg = require("pg"),
   Q = require("q");
 
 exports.startHttpd = startHttpd;
 exports.setFeeder = setFeeder;
 
 var _config;
+
+// interface for communication with the feeder.node.js module
 var _feeder = {
   getStatsConnections: function() {},
   writeConfig: function () { },
@@ -62,6 +65,12 @@ function startHttpd(config) {
       .finally(function () { res.end(); });
   });
 
+  app.get("/api/ctf", function (req, res) {
+    Q(getCtf())
+      .then(function (obj) { res.json(obj); })
+      .catch(function (err) { res.json({ ok: false, msg: "internal error: " + err }); })
+      .finally(function () { res.end(); });
+  });
 
   app.listen(_config.webadmin.port);
 }
@@ -138,6 +147,9 @@ function updateServers(req) {
 
   if (!req.owner && !req.server)
     return { ok: false, msg: "No owner or server specified" };
+
+  if (!req.oldPwd)
+    return { ok: false, msg: "Current password must not be blank" };
 
   if ((req.newPwd1 || req.newPwd2) && req.newPwd1 != req.newPwd2)
     return { ok: false, msg: "New passwords don't match" };
@@ -242,4 +254,24 @@ function getJson(req, res) {
     headers: asGzip ? {} : { "Content-Type": "application/json", "Content-Encoding": "gzip" }
   };
   return Q.ninvoke(res, "sendFile", req.params.file + ".json.gz", options).catch(function () { return res.json({ ok: false, msg: "File not found" })});
+}
+
+function getCtf() {
+  var defConnect = Q.defer();
+  pg.connect(_config.webadmin.database, function (err, cli, release) {
+    if (err)
+      defConnect.reject(new Error(err));
+    else {
+      cli.release = release;
+      defConnect.resolve(cli);
+    }
+  });
+
+  return Q(defConnect.promise).then(function (cli) {
+    return Q.ninvoke(cli, "query", "select now() as thetime")
+      .then(function (result) {
+        return result.rows[0]["thetime"];
+      })
+      .finally(function () { cli.release(); });
+  });
 }
