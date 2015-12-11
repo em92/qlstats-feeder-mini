@@ -107,7 +107,9 @@ function extractJsonData() {
       return Q.all(proms);
     })
     .then(function(matchRankings) {
-      // TODO: sort matches by time
+      // sort matches by time and extract the player results
+      matchRankings.sort(function (a, b) { return a.date < b.date ? -1 : a.date == b.date ? 0 : +1 });
+      matchRankings = matchRankings.map(function(m) { return m.players });
 
       matchRankings.forEach(function (playerRankings) {
         var players = [];
@@ -130,7 +132,7 @@ function extractJsonData() {
       players.sort(function (a, b) { return -(a.ts < b.ts ? -1 : a.ts == b.ts ? 0 : +1); });
       players.forEach(function (p) {
         if (p.matches >= 10)
-          console.log(p.name + ", ts=" + Math.round(p.ts, 3) + " (mu=" + Math.round(p.skill[0], 3) + ", sig=" + Math.round(p.skill[1], 3) + "), matches: " + p.matches);
+          console.log(p.name + ", ts=" + Math.round(p.ts, 3) + " (mu=" + Math.round(p.skill[0], 3) + ", sig=" + Math.round(p.skill[1], 3) + "), matches: " + p.matches + ", wins: " + Math.round(p.wins*1000/p.matches)/10 + "%");
       });
       return playersBySteamId;
     });
@@ -143,9 +145,10 @@ function extractDataFromJson(path) {
     .then(function(data) { return Q.nfcall(zlib.gunzip, data); })
     .then(function(json) {
       var raw = JSON.parse(json);
-      if (raw.matchStats.ABORTED)
-        return [];
+      if (raw.matchStats.ABORTED || raw.matchStats.GAME_TYPE != "CTF")
+        return { date: 0, players: [] };
 
+      // aggregate total time, damage and score of player during a match (could have been switching teams)
       var playerData = {}
       raw.playerStats.forEach(function (p) {
         if (p.ABORTED || p.WARMUP)
@@ -153,19 +156,21 @@ function extractDataFromJson(path) {
 
         var pd = playerData[p.STEAM_ID];
         if (!pd) {
-          pd = { id: p.STEAM_ID, name: p.NAME, timeRed: 0, timeBlue: 0, score: 0, dg: 0, dt: 0, win: false };
+          pd = { id: p.STEAM_ID, name: p.NAME, timeRed: 0, timeBlue: 0, score: 0, dg: 0, dt: 0 };
           playerData[p.STEAM_ID] = pd;
         }
+
         var time = Math.max(p.PLAY_TIME, raw.matchStats.GAME_LENGTH);
         if (p.TEAM == 2)
           pd.timeBlue += time;
         else
           pd.timeRed += time;
         pd.score += p.SCORE;
-        pd.dg += p.DAMAGE.GIVEN;
+        pd.dg += p.DAMAGE.DEALT;
         pd.dt += p.DAMAGE.TAKEN;
       });
 
+      // calculate a rankingScore for each player and order the list by it
       var players = [];
       for (var key in playerData) {
         if (!playerData.hasOwnProperty(key)) continue;
@@ -176,15 +181,17 @@ function extractDataFromJson(path) {
         if (playersBySteamId[p.id])
           playersBySteamId[p.id].matches++;
         else
-          playersBySteamId[p.id] = { id: p.id, name: p.name, matches: 1, skill: [25.0, 25.0 / 3.0] };
+          playersBySteamId[p.id] = { id: p.id, name: p.name, matches: 1, wins: 0, skill: [25.0, 25.0 / 3.0] };
 
         var winningTeam = raw.matchStats.TSCORE0 > raw.matchStats.TSCORE1 ? -1 : raw.matchStats.TSCORE0 == raw.matchStats.TSCORE1 ? 0 : +1;
         var playerTeam = p.timeRed >= p.timeBlue ? -1 : +1;
         var isWinner = playerTeam == winningTeam;
-        var rankingScore = (p.dt == 0 ? 2 : Math.max(2, Math.min(0.5, p.dg / p.dt))) * (p.score + p.dg / 20) * raw.matchStats.GAME_LENGTH / (p.timeRed + p.timeBlue) + (isWinner ? 300 : 0);
-        players.push({ id: p.id, rank: rankingScore });
+        if (isWinner)
+          playersBySteamId[p.id].wins++;
+        var rankingScore = (p.dt == 0 ? 2 : Math.min(2, Math.max(0.5, p.dg / p.dt))) * (p.score + p.dg / 20) * raw.matchStats.GAME_LENGTH / (p.timeRed + p.timeBlue) + (isWinner ? 300 : 0);
+        players.push({ id: p.id, rank: -rankingScore }); // lower value in rank means better (doesn't have to be 1(st), 2(nd), 3(rd) ... just the order matters)
       }
-      return players;
+      return { date: raw.gameEndTimestamp, players: players };
     });
 }
 
