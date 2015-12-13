@@ -19,13 +19,13 @@ The default page is a Server Admin Panel that can be used to add and maintain se
 
 The HTTP server also provides a few **API URLs**:
 
-**/api/jsons/2015-11-24**
+/api/jsons/2015-11-24  
 returns a list of all match files stored in the 2015-01/24/ folder, without the .json[.gz] extension.
 
-**/api/jsons/2015-11-24/00366f62-9f5a-4d7d-a46b-6638fcfcb2f6.json**
+/api/jsons/2015-11-24/00366f62-9f5a-4d7d-a46b-6638fcfcb2f6.json  
 returns the requested file in plain-text JSON format  
 
-**/api/jsons/2015-11-24/00366f62-9f5a-4d7d-a46b-6638fcfcb2f6.json.gz**
+/api/jsons/2015-11-24/00366f62-9f5a-4d7d-a46b-6638fcfcb2f6.json.gz  
 returns the requested file in gzipped JSON format
 
 Connecting to Quake Live Game ZMQ
