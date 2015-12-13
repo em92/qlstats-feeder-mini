@@ -34,7 +34,8 @@ var __dirname; // current working directory (defined by node.js)
 var _logger; // log4js logger
 var _config; // config data from cfg.json
 var _statsConnections = {}; // dictionary with IP:port => StatsConnection
-var _ignoreConfigChange = false; // 
+var _ignoreConfigChange = false; //
+var _reloadErrorFiles = false;
 
 
 function main() {
@@ -44,34 +45,51 @@ function main() {
 
   reloadConfig();
 
-  // process saved .json.gz files specified on the command line ... or connect to live zmq feeds
+  
   if (process.argv.length > 2) {
-    for (var i = 2; i < process.argv.length; i++)
-      feedJsonFile(process.argv[i]);
-  } else {
-    connectToServerList(_config.feeder.servers);
-    var timer;
-    fs.watch(__dirname + "/cfg.json", function () {
-      // execute the reload after a delay to give an editor the chance to delete/truncate/write/flush/close/release the file
-      if (timer)
-        clearTimeout(timer);
-      timer = setTimeout(function() {
-        timer = undefined;
-        if (reloadConfig())
-          connectToServerList(_config.feeder.servers);
-      }, 500);
-    });
+    var files;
+    if (process.argv[2] == "-e") {
+      _reloadErrorFiles = true;
+      files = [__dirname + "/" + _config.feeder.jsondir + "errors"];
+    }
+    else
+      files = process.argv.slice(2);
 
+    // process saved .json[.gz] files specified on the command line (allows recursion into directories)
+    loadJsonFiles(files)
+      .catch(function (err) { _logger.error(err); })
+      .done();
+    return;
+  } 
+
+  // connect to live zmq stats data feeds from QL game servers
+  connectToServerList(_config.feeder.servers);
+
+  // setup automatic config file reloading when the file changes
+  var timer;
+  fs.watch(__dirname + "/cfg.json", function () {
+    // execute the reload after a delay to give an editor the chance to delete/truncate/write/flush/close/release the file
+    if (timer)
+      clearTimeout(timer);
+    timer = setTimeout(function() {
+      timer = undefined;
+      if (reloadConfig())
+        connectToServerList(_config.feeder.servers);
+    }, 500);
+  });
+
+
+  // start HTTP server with Server Admin Panel and API URLs
+  if (_config.webadmin.enabled) {
     webadmin.setFeeder({
-      getStatsConnections: function () { return _statsConnections; },
+      getStatsConnections: function() { return _statsConnections; },
       connectServer: connectServer,
       writeConfig: writeConfig
     });
-  
+
     webadmin.startHttpd(_config);
   }
 }
-
 
 function reloadConfig() {
   try {
@@ -111,17 +129,43 @@ function writeConfig() {
   fs.writeFile(__dirname + "/cfg.json", JSON.stringify(_config, null, 2));
 }
 
-function feedJsonFile(file) {
-  if (!file.match(/.json(.gz)?$/)) {
-    _logger.warn("Skipping file (not *.json[.gz]): " + file);
-    return false;
-  }
+function loadJsonFiles(files) {
+  // serialize calls for each file
+  return files.reduce(function(chain, file) {
+    return chain.then(function() { return feedJsonFile(file); });
+  }, Q());
 
-  _logger.info("Loading " + file);
-  var data = fs.readFileSync(file);
-  if (file.slice(-3) == ".gz")
-    data = zlib.gunzipSync(data);
-  return processGame(JSON.parse(data));
+  function feedJsonFile(file) {
+    return Q
+      .nfcall(fs.stat, file)
+      .then(function(stats) {
+        if (stats.isDirectory()) {
+          return Q
+            .nfcall(fs.readdir, file)
+            .then(function(direntries) {
+              return loadJsonFiles(direntries.map(function (direntry) { return file + "/" + direntry; }));
+            });
+        }
+
+        if (!file.match(/.json(.gz)?$/)) {
+          _logger.warn("Skipping file (not *.json[.gz]): " + file);
+          return Q();
+        }
+
+        _logger.info("Loading " + file);
+        return Q
+          .nfcall(fs.readFile, file)
+          .then(function(content) { return file.slice(-3) == ".gz" ? Q.nfcall(zlib.gunzip, content) : content; })
+          .then(function (json) { return processGame(JSON.parse(json)) })
+          .then(function(success) {
+            if (_reloadErrorFiles && success)
+              return Q.nfcall(fs.unlink, file);
+            else
+              return success;
+          })
+          .catch(function(err) { _logger.error(file + ": " + err)});
+      });
+  }
 }
 
 function connectToServerList(servers) {
@@ -387,7 +431,8 @@ function postMatchReportToXonstat(addr, game, report) {
     function(err) {
       if (err) {
         _logger.error(addr + ": upload failed: " + game.matchStats.MATCH_GUID + ": " + err);
-        saveGameJson(game, true);
+        if (!_reloadErrorFiles)
+          saveGameJson(game, true);
         defer.reject(new Error(err));
       } else {
         _logger.info(addr + ": match uploaded: " + game.matchStats.MATCH_GUID);

@@ -1,0 +1,26 @@
+{
+  "name": "qlstats-feeder",
+  "version": "2.0.0",
+  "description": "Quake Live stats tracker. Connects to QL game server ZMQ stats ports, saves match results as .json.gz, uploads reformatted match results to the python HTTP server",
+  "homepage": "https://github.com/PredatH0r/XonStat",
+  "license": "MIT",
+  "author": {
+    "name": "Horst Beham (aka PredatH0r)",
+    "email": "predath0r@gmx.at"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/PredatH0r/XonStat.git"
+  },
+  "dependencies": {
+    "body-parser": ">= 1.14.1",
+    "express": ">= 4.13.3",
+    "graceful-fs": ">= 3.0.0",
+    "log4js": ">= 0.6.22",
+    "node-gyp": ">= 3.0.0",
+    "pg": ">= 4.0.0",
+    "q": ">= 1.2.0",
+    "request": ">= 2.53.0",
+    "zmq": ">=2.13.0"
+  }
+}
