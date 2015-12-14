@@ -144,10 +144,14 @@ StatsConnection.prototype.onIdleTimeout = function () {
 }
 
 StatsConnection.prototype.disconnect = function () {
-  //try { this.sub.unsubscribe(""); } catch (err) { }
-  try { this.sub.unmonitor(); } catch (err) { }
-  try { this.sub.disconnect("tcp://" + this.addr); } catch (err) { }
-  try { this.sub.close(); } catch (err) { }
+  var err;
+  if (!this.disconnected) {
+    //try { this.sub.unsubscribe(""); } catch (err) { }
+    try { this.sub.unmonitor(); } catch (err) { _logger.error("Can't unmonitor " + this.addr + ": " + err) }
+    if (this.connected)
+      try { this.sub.disconnect("tcp://" + this.addr); } catch (err) { _logger.error("Can't disconnect from " + this.addr + ": " + err) }
+    try { this.sub.close(); } catch (err) { _logger.error("Can't close " + this.addr + ": " + err) }
+  }
   this.connected = false;
   this.connecting = false;
   this.lastMessageUtc = 0;

@@ -83,7 +83,8 @@ function main() {
   if (_config.webadmin.enabled) {
     webadmin.setFeeder({
       getStatsConnections: function() { return _statsConnections; },
-      connectServer: connectServer,
+      addServer: addServer,
+      removeServer: removeServer,
       writeConfig: writeConfig
     });
 
@@ -183,8 +184,15 @@ function connectToServerList(servers) {
     return;
   }
 
-  // create a new dictionary with the zmq connections for the new server list
-  // after the loop _statsConnections only contains servers which are no longer configured
+  // copy current connection dictionary
+  var oldZmqConnections = _statsConnections;
+  for (var addr in _statsConnections) {
+    if (_statsConnections.hasOwnProperty(addr))
+      oldZmqConnections[addr] = _statsConnections[addr];
+  }
+
+  // create a new dictionary with the zmq connections for the new server list.
+  // after the loop oldZmqConnections only contains servers which are no longer used
   var newZmqConnections = {};
   var deferredConnections = [];
   var conn;
@@ -201,50 +209,62 @@ function connectToServerList(servers) {
     var port = match[3];
     var pass = match[4];
     var addr = ip + ":" + port;
-    conn = _statsConnections[addr];
+    conn = oldZmqConnections[addr];
     if (conn && pass == conn.pass) {
+      // unchanged, existing connection
       conn.owner = owner;
-      delete _statsConnections[addr];
+      delete oldZmqConnections[addr];
       newZmqConnections[addr] = conn;
     }
     else {
       // nodejs cannot handle to synchronously connect to 300+ servers within a single JS engine tick, 
       // so we use Q to spread them out one connection per tick
       deferredConnections.push(
-        (function (owner, ip, port, pass, addr) {
+        (function (owner, ip, port, pass) {
           return function () {
-            var conn = connectServer(owner, ip, port, pass);
-            newZmqConnections[addr] = conn;
+            return addServer(owner, ip, port, pass);
           }
-        })(owner, ip, port, pass, addr));
+        })(owner, ip, port, pass));
     }
   }
 
-  // sequential execution of the connection attempts, one per tick
-  deferredConnections.reduce(function(chain, fnCreateNextConn) { return chain.then(fnCreateNextConn); }, Q())
-    .then(function() { _logger.info("Finished connection setup") });
-
   // shut down connections to servers which are no longer in the config
-  for (var addr in _statsConnections) {
-    if (!_statsConnections.hasOwnProperty(addr)) continue;
-    conn = _statsConnections[addr];
+  for (var addr in oldZmqConnections) {
+    if (!oldZmqConnections.hasOwnProperty(addr)) continue;
     _logger.info(addr + ": disconnected. Server was removed from config.");
-    conn.disconnect();
+    conn = oldZmqConnections[addr];
+    removeServer(conn);
   }
 
   _statsConnections = newZmqConnections;
+
+  // sequential execution of the connection attempts, one per tick
+  deferredConnections.reduce(function (chain, fnCreateNextConn) { return chain.then(fnCreateNextConn); }, Q())
+    .then(function () { _logger.info("Finished connection setup") });
 }
 
-function connectServer(owner, ip, port, pass) {
+function addServer(owner, ip, port, pass) {
+  var addr = ip + ":" + port;
+  if (_statsConnections[addr]) {
+    _logger.error("Ignoring duplicate connection to " + addr);
+    return null;
+  }
+
   var conn = StatsConnection.create(owner, ip, port, pass, onZmqMessageCallback);
   conn.connect();
+  _statsConnections[addr] = conn;
   return conn;
+}
+
+function removeServer(conn) {
+  conn.disconnect();
+  delete _statsConnections[conn.addr];
 }
 
 function onZmqMessageCallback(conn, data) {
   var msg = data.toString();
   var obj = JSON.parse(msg);
-  _logger.debug(conn.addr + ": received ZMQ message: " + obj.TYPE);
+  _logger.trace(conn.addr + ": received ZMQ message: " + obj.TYPE);
   if (obj.TYPE == "MATCH_STARTED") {
     _logger.debug(conn.addr + ": match started");
     conn.matchStarted = true;

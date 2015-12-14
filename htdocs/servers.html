@@ -4,7 +4,7 @@
 
   <style type="text/css">
     body { background-color: #222;}
-    body,p,td { font-family: Segoe UI, Tahoma, Helvetica, Sans-Serif;color: white; }
+    body,p,td { font-family: Segoe UI, Tahoma, Helvetica, Sans-Serif;color: white; }	
     a.owner, a.host, a.port, a.add { cursor: pointer; }
     td { padding: 0 5px 0 5px;}
     td.busy { color: greenyellow; }
@@ -15,11 +15,13 @@
     #serverList { margin-top: 50px; }
     #addForm, #editForm { display: none;position: fixed;top: 30px;right: 30px;width: 600px;min-height: 300px;background-color: #444;padding: 20px;}
     div.button {cursor: pointer; padding: 5px 20px 5px 20px;display: inline-block;background-color: #888;margin-right: 20px;}
-    .buttons { margin-top: 40px;}
+    .buttons { margin-top: 40px; }
     #addStatusText, #editstatusText { margin-top: 20px;}
     div.button.success { background-color: #080;}
     div.button.error { background-color: #800;}
     .mtop td { padding-top: 15px; }
+    #notification { float: right; }
+    #notification a { color: yellow; }
   </style>
 </head>
 
@@ -48,6 +50,12 @@
   </table>
 
   <div id="btnAddServer" class="button" style="position: relative; left: 0; top: 10px">Add Server</div>
+  
+  <div id="notification">
+    During an outage on Dec 14th match results could not be stored.
+    <br>The system is back to normal operation now.
+    <br>I apologize for any inconvenience this may have caused.
+  </div>
 </div>
 
 <table id="serverList">

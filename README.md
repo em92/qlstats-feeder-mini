@@ -5,11 +5,11 @@ The QLstats.net feeder is the glue between Quake Live game servers and the QLsta
 
 In its normal mode of operation, it collects match statistics from Quake Live game servers through ZMQ, then transforms and forwards the data to the QLstats HTTP server (submission.py), which insert it in the database.
 
-In the default configuration, it also saves the received JSON data as files for eventual later reprocessing.
+In the default configuration, it also saves the received JSON data as files for eventual later reprocessing.  
 If there is an error while uploading the data to the QLstats HTTP server, a copy of the JSON file is saved in the errors/ folder.
 
-To reprocess files or whole directories you can specify them as command line parameters. 
-When started like that, the feeder only loads the .json[.gz] files and does not connect to any game servers.
+To reprocess files or whole directories you can specify them as command line parameters.  
+When started like that, the feeder only loads the .json[.gz] files and does not connect to any game servers.  
 When started with the "-e" parameter, it will resend all files from the errors/ folder to the QLstats HTTP server and deletes them on success.
 
 Built-in HTTP server

@@ -16,8 +16,9 @@ var _config;
 // interface for communication with the feeder.node.js module
 var _feeder = {
   getStatsConnections: function() {},
-  writeConfig: function () { },
-  addServer: function (owner, ip, port, pass) { }
+  addServer: function (owner, ip, port, pass) { },
+  removeServer: function(statsConn) { },
+  writeConfig: function () { }
 };
 
 function setFeeder(feeder) {
@@ -136,8 +137,7 @@ function addServer(req) {
   else if (!passByOwner[req.owner] && req.newPwd1 != req.newPwd2)
     return { ok: false, msg: "Passwords don't match" };
 
-  var conn = _feeder.connectServer(req.owner, serverIp, serverPort, req.newPwd1);
-  statsConn[req.newAddr] = conn;
+  _feeder.addServer(req.owner, serverIp, serverPort, req.newPwd1);
   _feeder.writeConfig();
   return { ok: true, msg: "Added " + req.newAddr };
 }
@@ -175,12 +175,28 @@ function updateServers(req) {
       return { ok: false, msg: "Address change is only allowed for single IP or port" };
   }
 
-  if (req.newAddr) {
-    // TODO: check if someone else already owns the IP or IP:port
+  var statsConn = _feeder.getStatsConnections();
+
+  // check if someone else already owns the new IP
+  if (newIp && newIp != serverIp) {
+    var ipOwner = null;
+    var validPass = false;
+    for (var addr in statsConn) {
+      if (!statsConn.hasOwnProperty(addr)) continue;
+      var conn = statsConn[addr];
+      if (conn.ip == newIp) {
+        ipOwner = conn.owner;
+        if (conn.pass && conn.pass == req.oldPwd) {
+          validPass = true;
+          break;
+        }
+      }
+    }
+    if (ipOwner && !validPass)
+      return { ok: false, msg: "The new IP is owned by " + ipOwner };
   }
 
 
-  var statsConn = _feeder.getStatsConnections();
   var result = { ok: true, msg: "" };
   for (var key in statsConn) {
     if (!statsConn.hasOwnProperty(key)) continue;
@@ -196,8 +212,7 @@ function updateServers(req) {
     }
 
     if (req.action == "delete") {
-      conn.disconnect();
-      delete statsConn[key];
+      _feeder.removeServer(conn);
       result.msg += conn.addr + " deleted\n";
       continue;
     }
@@ -205,20 +220,13 @@ function updateServers(req) {
     var newAddr = (newIp || conn.ip) + ":" + (newPort || conn.port);
     if ((newIp || newPort) && newAddr != conn.addr && statsConn[newAddr]) {
       result.ok = false;
-      result.msg += newAddr + " is already in the list";
+      result.msg += newAddr + " is already in the list\n";
       continue;
     }
 
     if (req.newPwd1 || newIp || newPort) {
-      if (req.newPwd1)
-        conn.pass = req.newPwd1;
-      if (newIp)
-        conn.ip = newIp;
-      if (newPort)
-        conn.port = newPort;
-      conn.addr = newAddr;
-      conn.disconnect();
-      conn.connect();
+      _feeder.removeServer(conn);
+      _feeder.addServer(req.owner || conn.owner, newIp || conn.ip, newPort || conn.port, req.newPwd1 || conn.pass, newAddr);
       result.msg += conn.addr + " updated\n";
     }
   }
