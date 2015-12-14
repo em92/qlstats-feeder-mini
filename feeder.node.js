@@ -104,6 +104,16 @@ function reloadConfig() {
       process.exit();
     }
 
+    // migrate configuration file versions
+
+    if (!_config.webadmin)
+      _config.webadmin = { enabled: false, port: 8081, database: "postgres://xonstat:xonstat@localhost/xonstatdb" };
+
+    if (!_config.feeder.xonstatSubmissionUrl) {
+      _config.feeder.xonstatSubmissionUrl = "http://localhost:" + _config.feeder.xonstatPort + "/stats/submit";
+      delete _config.feeder.xonstatPort;
+    }
+
     _logger.setLevel(_config.feeder.logLevel || log4js.levels.INFO);
     _logger.info("Reloaded modified of cfg.json");
     return true;
@@ -152,7 +162,6 @@ function loadJsonFiles(files) {
           return Q();
         }
 
-        _logger.info("Loading " + file);
         return Q
           .nfcall(fs.readFile, file)
           .then(function(content) { return file.slice(-3) == ".gz" ? Q.nfcall(zlib.gunzip, content) : content; })
@@ -177,6 +186,7 @@ function connectToServerList(servers) {
   // create a new dictionary with the zmq connections for the new server list
   // after the loop _statsConnections only contains servers which are no longer configured
   var newZmqConnections = {};
+  var deferredConnections = [];
   var conn;
   for (var i = 0; i < servers.length; i++) {
     var server = servers[i];
@@ -195,12 +205,24 @@ function connectToServerList(servers) {
     if (conn && pass == conn.pass) {
       conn.owner = owner;
       delete _statsConnections[addr];
+      newZmqConnections[addr] = conn;
     }
-    else
-      conn = connectServer(owner, ip, port, pass);
-    
-    newZmqConnections[addr] = conn;
+    else {
+      // nodejs cannot handle to synchronously connect to 300+ servers within a single JS engine tick, 
+      // so we use Q to spread them out one connection per tick
+      deferredConnections.push(
+        (function (owner, ip, port, pass, addr) {
+          return function () {
+            var conn = connectServer(owner, ip, port, pass);
+            newZmqConnections[addr] = conn;
+          }
+        })(owner, ip, port, pass, addr));
+    }
   }
+
+  // sequential execution of the connection attempts, one per tick
+  deferredConnections.reduce(function(chain, fnCreateNextConn) { return chain.then(fnCreateNextConn); }, Q())
+    .then(function() { _logger.info("Finished connection setup") });
 
   // shut down connections to servers which are no longer in the config
   for (var addr in _statsConnections) {
@@ -328,6 +350,7 @@ function processGame(game) {
 function exportMatchInformation(gt, game, report) {
   report.push("0 " + game.serverIp); // not XonStat standard
   report.push("1 " + game.gameEndTimestamp); // not XonStat standard
+  report.push("2 " + game.matchStats.FACTORY);
   report.push("S " + game.matchStats.SERVER_TITLE);
   report.push("I " + game.matchStats.MATCH_GUID);
   report.push("G " + gt);
@@ -422,7 +445,7 @@ function mapFields(info, mapping, data) {
 function postMatchReportToXonstat(addr, game, report) {
   var defer = Q.defer();
   request({
-      uri: "http://localhost:" + _config.feeder.xonstatPort + "/stats/submit",
+      uri: _config.feeder.xonstatSubmissionUrl,
       timeout: 10000,
       method: "POST",
       headers: { "X-D0-Blind-Id-Detached-Signature": "dummy" },
