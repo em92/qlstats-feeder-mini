@@ -20,12 +20,23 @@
     div.button.success { background-color: #080;}
     div.button.error { background-color: #800;}
     .mtop td { padding-top: 15px; }
-    #notification { float: right; }
-    #notification a { color: yellow; }
+    #panels { float: right;display: none;font-size: small;}
+    #panels span { font-size:large; }
+    #panels a { color: yellow; }
   </style>
 </head>
 
 <body>
+
+<div id="panels">
+  <span id="panelLinks"></span>
+  <br/>
+  <br/>ZMQ limits the numbers of connections per process,
+  <br/>so the servers are spread across multiple panels.
+  <br/>Each panel allows a total of &lt;= 200 servers.
+  <br/>New owners can be added while &lt;= 150 servers.
+  <br/>If a panel is full, please use another one.
+</div>
 
 <h1>qlstats.net Game Server Admin Panel</h1>
 
@@ -50,12 +61,7 @@
   </table>
 
   <div id="btnAddServer" class="button" style="position: relative; left: 0; top: 10px">Add Server</div>
-  
-  <div id="notification">
-    During an outage on Dec 14th match results could not be stored.
-    <br>The system is back to normal operation now.
-    <br>I apologize for any inconvenience this may have caused.
-  </div>
+
 </div>
 
 <table id="serverList">
@@ -240,6 +246,19 @@
   }
 
   function main() {
+    var panels = [8081, 8082, 8083];
+    if (panels.length > 1) {
+      var sep = "";
+      for (var i = 0; i < panels.length; i++) {
+        $("#panelLinks").append(sep + "<a href='http://" + location.hostname + ":" + panels[i] + "'>Panel " + (i + 1) + "</a>");
+        sep = " | ";
+      }
+      $("#panels").css("display", "block");
+      var i = panels.indexOf(parseInt(location.port));
+      if (i >= 0)
+        $("h1").append(" " + (i + 1));
+    }
+
     fillServerList();
 
     $("#btnAddServer").click(function() { showAddForm(); });

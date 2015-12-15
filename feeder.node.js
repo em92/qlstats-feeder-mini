@@ -12,6 +12,9 @@
 
  When XonStat's submission.py server is not responding with an "ok", a .json.gz is saved in the <jsondir>/errors/ folder.
 
+ The "zmq" node module uses "libzmq", which has a hardcoded limit of 1024 sockets. 3 sockets per ZMQ connection => max 341 ZMQ conns.
+ You can either recompile libzmq + node.zmq, or run multiple instances of the feeder and provide different config files with "-c cfg1.json".
+
 */
 
 "use strict";
@@ -32,7 +35,8 @@ var IpPortPassRegex = /^(?:([^:]*):)?((?:[0-9]{1,3}\.){3}[0-9]{1,3}):([0-9]+)(?:
 
 var __dirname; // current working directory (defined by node.js)
 var _logger; // log4js logger
-var _config; // config data from cfg.json
+var _configFileName = "cfg.json";
+var _config; // config data
 var _statsConnections = {}; // dictionary with IP:port => StatsConnection
 var _ignoreConfigChange = false; //
 var _reloadErrorFiles = false;
@@ -43,17 +47,25 @@ function main() {
   Q.longStackSupport = false; // enable if you have to trace a problem, but it has a HUGE performance penalty
   StatsConnection.setLogger(_logger);  
 
-  reloadConfig();
+  var args = process.argv.slice(2);
+  if (args.length >= 2 && args[0] == "-c") {
+    _configFileName = args[1];
+    args = args.slice(2);
+  }
 
-  
-  if (process.argv.length > 2) {
+  if (!reloadConfig()) {
+    _logger.error("Unable to load config file " + _configFileName);
+    process.exit(1);
+  }
+
+  if (args.length > 0) {
     var files;
-    if (process.argv[2] == "-e") {
+    if (args[0] == "-e") {
       _reloadErrorFiles = true;
       files = [__dirname + "/" + _config.feeder.jsondir + "errors"];
     }
     else
-      files = process.argv.slice(2);
+      files = args;
 
     // process saved .json[.gz] files specified on the command line (allows recursion into directories)
     loadJsonFiles(files)
@@ -63,11 +75,12 @@ function main() {
   } 
 
   // connect to live zmq stats data feeds from QL game servers
-  connectToServerList(_config.feeder.servers);
+  if (!connectToServerList(_config.feeder.servers))
+    process.exit(1);
 
   // setup automatic config file reloading when the file changes
   var timer;
-  fs.watch(__dirname + "/cfg.json", function () {
+  fs.watch(__dirname + "/" + _configFileName, function () {
     // execute the reload after a delay to give an editor the chance to delete/truncate/write/flush/close/release the file
     if (timer)
       clearTimeout(timer);
@@ -99,9 +112,9 @@ function reloadConfig() {
       return false;
     }
 
-    _config = JSON.parse(fs.readFileSync(__dirname + "/cfg.json"));
+    _config = JSON.parse(fs.readFileSync(__dirname + "/" + _configFileName));
     if (!(_config.feeder.saveDownloadedJson || _config.feeder.importDownloadedJson)) {
-      _logger.error("At least one of feeder.saveDownloadedJson or feeder.importDownloadedJson must be set in cfg.json");
+      _logger.error("At least one of feeder.saveDownloadedJson or feeder.importDownloadedJson must be set in " + _configFileName);
       process.exit();
     }
 
@@ -116,7 +129,7 @@ function reloadConfig() {
     }
 
     _logger.setLevel(_config.feeder.logLevel || log4js.levels.INFO);
-    _logger.info("Reloaded modified of cfg.json");
+    _logger.info("Reloaded modified " + _configFileName);
     return true;
   }
   catch (err) {
@@ -135,9 +148,10 @@ function writeConfig() {
     var conn = _statsConnections[addr];
     _config.feeder.servers.push(conn.owner + ":" + addr + "/" + conn.pass);
   }
+  _config.feeder.servers.sort();
 
   _ignoreConfigChange = true;
-  fs.writeFile(__dirname + "/cfg.json", JSON.stringify(_config, null, 2));
+  fs.writeFile(__dirname + "/" + _configFileName, JSON.stringify(_config, null, 2));
 }
 
 function loadJsonFiles(files) {
@@ -180,8 +194,15 @@ function loadJsonFiles(files) {
 
 function connectToServerList(servers) {
   if (!servers.length) {
-    _logger.error("There are no servers configured in cfg.json.");
-    return;
+    _logger.error("There are no servers configured in " + _configFileName);
+    return false;
+  }
+
+  // libzmq has a limit of max 1024 handles in a select() call. 1024 / 3 (sockets/connection) => 341 max
+  // Linux also often has a file handle limit of 1024 (ulimit -n), which is reached even before that (~ 255).
+  if (servers.length > 250) {
+    _logger.error("Too many servers, maximum allowed is 250 (to stay below the hardcoded libzmq limit).");
+    return false;
   }
 
   // copy current connection dictionary
@@ -217,14 +238,9 @@ function connectToServerList(servers) {
       newZmqConnections[addr] = conn;
     }
     else {
-      // nodejs cannot handle to synchronously connect to 300+ servers within a single JS engine tick, 
-      // so we use Q to spread them out one connection per tick
-      deferredConnections.push(
-        (function (owner, ip, port, pass) {
-          return function () {
-            return addServer(owner, ip, port, pass);
-          }
-        })(owner, ip, port, pass));
+      // ZMQ as a very low hardcoded limit on how many connections it can handle.
+      // Therefore we defer creating new connections until old connections have been cleaned up
+      deferredConnections.push({ owner: owner, ip: ip, port: port, pass: pass });
     }
   }
 
@@ -238,9 +254,19 @@ function connectToServerList(servers) {
 
   _statsConnections = newZmqConnections;
 
-  // sequential execution of the connection attempts, one per tick
-  deferredConnections.reduce(function (chain, fnCreateNextConn) { return chain.then(fnCreateNextConn); }, Q())
-    .then(function () { _logger.info("Finished connection setup") });
+  var count = 0;
+  try {
+    deferredConnections.forEach(function(conn) {
+      ++count;
+      addServer(conn.owner, conn.ip, conn.port, conn.pass);
+    });
+  }
+  catch (err) {
+    _logger.error("Failed creating ZMQ connection #" + count + ": " + err);
+    return false;
+  }
+
+  return true;
 }
 
 function addServer(owner, ip, port, pass) {

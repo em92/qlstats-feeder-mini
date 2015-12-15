@@ -12,6 +12,8 @@ To reprocess files or whole directories you can specify them as command line par
 When started like that, the feeder only loads the .json[.gz] files and does not connect to any game servers.  
 When started with the "-e" parameter, it will resend all files from the errors/ folder to the QLstats HTTP server and deletes them on success.
 
+The "-c" parameters can be used to specify a config file other than cfg.json to allow multiple instances with different server sets and ports.
+
 Built-in HTTP server
 ---
 By default the feeder will start a HTTP server on port 8081.  
@@ -37,3 +39,9 @@ If the connection is immediately closed by the server after it was established, 
 
 The feeder reconnects to all servers which have not sent any events for 15 minutes to work around an issue where QL stops sending data after some extended idle period.
 
+The 250 and 341 server barriers
+---
+The "zmq" node module uses "libzmq", which is by default compiled with a hardcoded limit of FD_SETSIZE=1024.
+So only <= 1024 TCP sockets can be used in a select() system call, and with ZMQ using 3 sockets/connection this results in a maximum of 341 connections per process.
+You either have to recompile libzmq + node.zmq, or run multiple instances of the feeder and split up the list into multiple config files.
+Under linux you may hit another wall even earlier, but you can change that with "ulimit -n 4096"

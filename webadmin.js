@@ -6,12 +6,17 @@
   bodyParser = require("body-parser"),
   fs = require("graceful-fs"),
   pg = require("pg"),
+  log4js = require("log4js"),
   Q = require("q");
 
 exports.startHttpd = startHttpd;
 exports.setFeeder = setFeeder;
 
+var MaxServersLowLimit = 150;
+var MaxServersHighLimit = 200;
+
 var _config;
+var _logger = log4js.getLogger("webadmin");
 
 // interface for communication with the feeder.node.js module
 var _feeder = {
@@ -30,6 +35,7 @@ function startHttpd(config) {
     return;
 
   _config = config;
+  _logger.setLevel(_config.webadmin.LOGLEVEL || "INFO");
 
   app.use(express.static(__dirname + "/htdocs"));
   app.use(bodyParser.json());
@@ -39,16 +45,19 @@ function startHttpd(config) {
   });
 
   app.get("/api/servers", function (req, res) {
+    _logger.info(req.connection.remoteAddress + ": /api/servers ");
     res.jsonp(getServerList());
     res.end();
   });
 
   app.post("/api/addserver", function (req, res) {
+    _logger.info(req.connection.remoteAddress + ": /api/addserver " + JSON.stringify(req.body));
     res.json(addServer(req.body));
     res.end();
   });
 
   app.post("/api/editserver", function (req, res) {
+    _logger.info(req.connection.remoteAddress + ": /api/editserver " + JSON.stringify(req.body));
     res.json(updateServers(req.body));
     res.end();
   });
@@ -117,14 +126,19 @@ function addServer(req) {
 
   var ownerByIp = {};
   var passByOwner = {};
+  var serverCount = 0;
   for (var key in statsConn) {
     if (!statsConn.hasOwnProperty(key)) continue;
+    ++serverCount;
     var conn = statsConn[key];
     if (!ownerByIp[conn.ip])
       ownerByIp[conn.ip] = conn.owner;
     if (!passByOwner[conn.owner])
       passByOwner[conn.owner] = conn.pass;
   }
+
+  if (serverCount >= MaxServersHighLimit || (!passByOwner[req.owner] && serverCount >= MaxServersLowLimit))
+    return { ok: false, msg: "Maximum number of servers reached. Please use a different admin panel." }
 
   if (!req.owner && !(req.owner = ownerByIp[serverIp]))
     return { ok: false, msg: "Owner required for new IPs" };
@@ -134,7 +148,7 @@ function addServer(req) {
 
   if (passByOwner[req.owner] && passByOwner[req.owner] != req.newPwd1)
     return { ok: false, msg: "Wrong password (must match the one of your first listed server)" };
-  else if (!passByOwner[req.owner] && req.newPwd1 != req.newPwd2)
+  if (!passByOwner[req.owner] && req.newPwd1 != req.newPwd2)
     return { ok: false, msg: "Passwords don't match" };
 
   _feeder.addServer(req.owner, serverIp, serverPort, req.newPwd1);

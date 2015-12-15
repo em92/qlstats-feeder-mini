@@ -7,7 +7,8 @@ exports.setLogger = setLogger;
 var MonitorInterval = 1000; // interval for checking connection status
 var ConnectAttemptInterval = 60 * 1000; // try for 60 sec to establish a connection, then consider the server to be offline
 var OfflineServerRetryInterval = 5 * 60 * 1000; // try to reconnect to offline servers after 5min
-var IdleReconnectInvterval = 15 * 60 * 1000; // reconnect to idle servers after 15min (QL stops sending data at some point)
+var IdleReconnectInterval = 15 * 60 * 1000; // reconnect to idle servers after 15min (QL stops sending data at some point)
+var ReconnectRandomizedInterval = 30 * 1000; // randomly delay reconnection attempts by up to +/-15 seconds to avoid load spikes on the server
 var WrongPasswordInterval = 5 * 1000; // when connection is closed within this interval after connecting, it's probably due to wrong password
 
 var _logger = {};
@@ -128,13 +129,13 @@ StatsConnection.prototype.connect = function (isReconnect) {
 
 StatsConnection.prototype.startReconnectTimer = function() {
   var self = this;
-  this.reconnectTimer = setTimeout(function() { self.connect(); }, OfflineServerRetryInterval);
+  this.reconnectTimer = setTimeout(function () { self.connect(); }, OfflineServerRetryInterval);
 }
 
 StatsConnection.prototype.resetIdleTimeout = function () {
   var self = this;
   clearTimeout(this.idleTimeout);
-  this.idleTimeout = setTimeout(function () { self.onIdleTimeout(); }, IdleReconnectInvterval);
+  this.idleTimeout = setTimeout(function () { self.onIdleTimeout(); }, IdleReconnectInterval + (Math.random() - 0.5) * ReconnectRandomizedInterval);
 }
 
 StatsConnection.prototype.onIdleTimeout = function () {
