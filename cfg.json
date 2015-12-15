@@ -1,17 +1,26 @@
 {
-  "webadmin": {
-    "enabled": true,
-    "port": 8081,
-    "database": "postgres://xonstat:xonstat@localhost/xonstatdb"
-  },
   "feeder": {
+    "enabled":  true,
     "saveDownloadedJson": true,
     "importDownloadedJson": true,
+    "xonstatSubmissionUrl": "http://localhost:8080/stats/submit",
     "jsondir": "./ql-match-jsons/",
-    "xonstatPort": 8080,
-    "logLevel": "INFO",
+    "logLevel": "DEBUG",
     "servers": [
-      "MyNickname:127.0.0.1:27960/zmq_stats_password"
+      "yourname:192.168.0.1:27960/yourpass",
+      "yourname:192.168.0.1:27961/yourpass"
     ]
+  },
+  "httpd": {
+    "port": 8081
+  },
+  "webadmin": {
+    "enabled": true,
+    "logLevel": "INFO"
+  },
+  "webapi": {
+    "enabled": true,
+    "logLevel": "INFO",
+    "database": "postgres://xonstat:xonstat@localhost/xonstatdb"
   }
 }

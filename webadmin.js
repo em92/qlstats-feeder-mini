@@ -1,21 +1,14 @@
 ﻿var
-  express = require("express"),
-  app = express(),
-  http = require("http"),
-  server = http.createServer(app),
   bodyParser = require("body-parser"),
   fs = require("graceful-fs"),
-  pg = require("pg"),
   log4js = require("log4js"),
   Q = require("q");
 
-exports.startHttpd = startHttpd;
-exports.setFeeder = setFeeder;
+exports.init = init;
 
 var MaxServersLowLimit = 150;
 var MaxServersHighLimit = 200;
 
-var _config;
 var _logger = log4js.getLogger("webadmin");
 
 // interface for communication with the feeder.node.js module
@@ -26,17 +19,11 @@ var _feeder = {
   writeConfig: function () { }
 };
 
-function setFeeder(feeder) {
+function init(config, app, feeder) {
   _feeder = feeder;
-}
+  _logger.setLevel(config.webadmin.logLevel || "INFO");
 
-function startHttpd(config) {
-  if (!config.webadmin.enabled)
-    return;
-
-  _config = config;
-  _logger.setLevel(_config.webadmin.LOGLEVEL || "INFO");
-
+  var express = require("express");
   app.use(express.static(__dirname + "/htdocs"));
   app.use(bodyParser.json());
 
@@ -61,28 +48,6 @@ function startHttpd(config) {
     res.json(updateServers(req.body));
     res.end();
   });
-
-  app.get("/api/jsons/:date", function(req, res) {
-    Q(listJsons(req))
-      .then(function (result) { res.json(result); })
-      .catch(function (err) { res.json({ ok: false, msg: "internal error: " + err }); })
-      .finally(function () { res.end(); });
-  });
-
-  app.get("/api/jsons/:date/:file.json(.gz)?", function (req, res) {
-    Q(getJson(req, res))
-      .catch(function (err) { res.json({ ok: false, msg: "internal error: " + err }); })
-      .finally(function () { res.end(); });
-  });
-
-  app.get("/api/ctf", function (req, res) {
-    Q(getCtf())
-      .then(function (obj) { res.json(obj); })
-      .catch(function (err) { res.json({ ok: false, msg: "internal error: " + err }); })
-      .finally(function () { res.end(); });
-  });
-
-  app.listen(_config.webadmin.port);
 }
 
 function getServerList() {
@@ -248,52 +213,4 @@ function updateServers(req) {
   _feeder.writeConfig();
 
   return result;
-}
-
-function listJsons(req) {
-  var ts = Date.parse(req.params.date);
-  if (ts == NaN || !ts)
-    return { ok: false, msg: "Date must be provided in YYYY-MM-DD format" };
-  var date = new Date(ts);
-  var dir = __dirname + "/" + _config.feeder.jsondir + "/" + date.getUTCFullYear() + "-" + ("0" + (date.getUTCMonth() + 1)).substr(-2) + "/" + ("0" + date.getUTCDate()).substr(-2);
-  return Q
-    .nfcall(fs.readdir, dir)
-    .then(function (files) { return { ok: true, files: files.map(function (name) { return name.substr(0, name.indexOf(".json")) }) }; })
-    .catch(function () { return { ok: false, msg: "File not found" } });
-}
-
-function getJson(req, res) {
-  var ts = Date.parse(req.params.date);
-  if (ts == NaN || !ts)
-    return Q(res.json({ ok: false, msg: "Date must be provided in YYYY-MM-DD format" }));
-
-  var date = new Date(ts);
-  var dir = __dirname + "/" + _config.feeder.jsondir + "/" + date.getUTCFullYear() + "-" + ("0" + (date.getUTCMonth() + 1)).substr(-2) + "/" + ("0" + date.getUTCDate()).substr(-2) + "/";
-  var asGzip = req.path.substr(-3) == ".gz";
-  var options = {
-    root: dir,
-    dotfiles: "deny",
-    headers: asGzip ? {} : { "Content-Type": "application/json", "Content-Encoding": "gzip" }
-  };
-  return Q.ninvoke(res, "sendFile", req.params.file + ".json.gz", options).catch(function () { return res.json({ ok: false, msg: "File not found" })});
-}
-
-function getCtf() {
-  var defConnect = Q.defer();
-  pg.connect(_config.webadmin.database, function (err, cli, release) {
-    if (err)
-      defConnect.reject(new Error(err));
-    else {
-      cli.release = release;
-      defConnect.resolve(cli);
-    }
-  });
-
-  return Q(defConnect.promise).then(function (cli) {
-    return Q.ninvoke(cli, "query", "select now() as thetime")
-      .then(function (result) {
-        return result.rows[0]["thetime"];
-      })
-      .finally(function () { cli.release(); });
-  });
 }

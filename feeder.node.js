@@ -24,11 +24,12 @@ var
   request = require("request"),
   log4js = require("log4js"),
   zlib = require("zlib"),
-  Q = require("q");
+  Q = require("q"),
+  express = require("express"),
+  http = require("http");
 
 var
-  StatsConnection = require("./statsconn"),
-  webadmin = require ("./webadmin");
+  StatsConnection = require("./statsconn");
 
 
 var IpPortPassRegex = /^(?:([^:]*):)?((?:[0-9]{1,3}\.){3}[0-9]{1,3}):([0-9]+)(?:\/(.*))?$/;  // IP:port/pass
@@ -53,56 +54,27 @@ function main() {
     args = args.slice(2);
   }
 
+  loadInitialConfig();
+
+  if (args.length > 0) {
+    processFilesFromCommandLine(args);
+    return;
+  }
+
+  if (_config.feeder.enabled !== false)
+    startFeeder();
+
+  if (_config.webadmin.enabled || _config.webapi.enabled)
+    startHttpd();
+}
+
+function loadInitialConfig() {
   if (!reloadConfig()) {
     _logger.error("Unable to load config file " + _configFileName);
     process.exit(1);
   }
-
-  if (args.length > 0) {
-    var files;
-    if (args[0] == "-e") {
-      _reloadErrorFiles = true;
-      files = [__dirname + "/" + _config.feeder.jsondir + "errors"];
-    }
-    else
-      files = args;
-
-    // process saved .json[.gz] files specified on the command line (allows recursion into directories)
-    loadJsonFiles(files)
-      .catch(function (err) { _logger.error(err); })
-      .done();
-    return;
-  } 
-
-  // connect to live zmq stats data feeds from QL game servers
-  if (!connectToServerList(_config.feeder.servers))
-    process.exit(1);
-
-  // setup automatic config file reloading when the file changes
-  var timer;
-  fs.watch(__dirname + "/" + _configFileName, function () {
-    // execute the reload after a delay to give an editor the chance to delete/truncate/write/flush/close/release the file
-    if (timer)
-      clearTimeout(timer);
-    timer = setTimeout(function() {
-      timer = undefined;
-      if (reloadConfig())
-        connectToServerList(_config.feeder.servers);
-    }, 500);
-  });
-
-
-  // start HTTP server with Server Admin Panel and API URLs
-  if (_config.webadmin.enabled) {
-    webadmin.setFeeder({
-      getStatsConnections: function() { return _statsConnections; },
-      addServer: addServer,
-      removeServer: removeServer,
-      writeConfig: writeConfig
-    });
-
-    webadmin.startHttpd(_config);
-  }
+  migrateConfigVersion();
+  fs.writeFileSync(__dirname + "/" + _configFileName, JSON.stringify(_config, null, "  "));
 }
 
 function reloadConfig() {
@@ -118,16 +90,6 @@ function reloadConfig() {
       process.exit();
     }
 
-    // migrate configuration file versions
-
-    if (!_config.webadmin)
-      _config.webadmin = { enabled: false, port: 8081, database: "postgres://xonstat:xonstat@localhost/xonstatdb" };
-
-    if (!_config.feeder.xonstatSubmissionUrl) {
-      _config.feeder.xonstatSubmissionUrl = "http://localhost:" + _config.feeder.xonstatPort + "/stats/submit";
-      delete _config.feeder.xonstatPort;
-    }
-
     _logger.setLevel(_config.feeder.logLevel || log4js.levels.INFO);
     _logger.info("Reloaded modified " + _configFileName);
     return true;
@@ -139,6 +101,90 @@ function reloadConfig() {
       _logger.error("Failed to reload the server list: " + err);
     return false;
   }
+}
+
+function migrateConfigVersion() {
+  if (!_config.httpd && _config.webadmin) {
+    _config.httpd = { enabled: _config.webadmin.enabled, port: _config.webadmin.port };
+    delete _config.webadmin.port;
+  }
+  else if (!_config.httpd)
+    _config.httpd = { port: 8081 };
+
+  if (_config.webadmin)
+    delete _config.webadmin.database;
+  else
+    _config.webadmin = { enabled: false, logLevel: "INFO" };
+  if (!_config.webadmin.logLevel)
+    _config.webadmin.logLevel = "INFO";
+
+  if (!_config.webapi)
+    _config.webapi = { enabled: false, logLevel: "INFO", database: "postgres://xonstat:xonstat@localhost/xonstatdb" };
+
+  if (!_config.feeder.xonstatSubmissionUrl) {
+    var port = _config.feeder.xonstatPort;
+    delete _config.feeder.xonstatPort;
+    _config.feeder.xonstatSubmissionUrl = "http://localhost:" + port + "/stats/submit";
+  }
+}
+
+function processFilesFromCommandLine(args) {
+  var files;
+  if (args[0] == "-e") {
+    _reloadErrorFiles = true;
+    files = [__dirname + "/" + _config.feeder.jsondir + "errors"];
+  }
+  else
+    files = args;
+
+  // process saved .json[.gz] files specified on the command line (allows recursion into directories)
+  loadJsonFiles(files)
+    .catch(function (err) { _logger.error(err); })
+    .done();
+}
+
+function startFeeder() {
+  // connect to live zmq stats data feeds from QL game servers
+  if (!connectToServerList(_config.feeder.servers))
+    process.exit(1);
+
+  _logger.info("starting feeder");
+
+  // setup automatic config file reloading when the file changes
+  var timer;
+  fs.watch(__dirname + "/" + _configFileName, function () {
+    // execute the reload after a delay to give an editor the chance to delete/truncate/write/flush/close/release the file
+    if (timer)
+      clearTimeout(timer);
+    timer = setTimeout(function () {
+      timer = undefined;
+      if (reloadConfig())
+        connectToServerList(_config.feeder.servers);
+    }, 500);
+  });
+}
+
+function startHttpd() {
+  var app = express();
+
+  if (_config.webadmin.enabled) {
+    _logger.info("starting webadmin");
+    var webadmin = require("./webadmin");
+    webadmin.init(_config, app, {
+      getStatsConnections: function () { return _statsConnections; },
+      addServer: addServer,
+      removeServer: removeServer,
+      writeConfig: writeConfig
+    });
+  }
+
+  if (_config.webapi.enabled) {
+    _logger.info("starting webapi");
+    var webapi = require("./webapi");
+    webapi.init(_config, app);
+  }
+
+  app.listen(_config.httpd.port);
 }
 
 function writeConfig() {
