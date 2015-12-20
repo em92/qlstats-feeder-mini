@@ -6,49 +6,37 @@
   Q = require("q");
 
 
+// TODO: turn this into command line args
 var gametype = "ctf";
+var resetRating = true;
 
 
 var _config;
 var g2 = new glicko2.Glicko2({ tau: 0.5, rating: 1500, rd: 300, vol: 0.06 });
 var playersBySteamId = {};
+var strategy;
 
-MaxAllowedTeamPlaytimeDelta = 2 * 60; // max 2 mins of playtime difference allowed
-var ValidFactoriesForGametype = {
-  "duel": ["duel", "qcon_duel"],
-  "ffa": ["ffa", "mg_ffa_classic"],
-  "ca": ["ca", "capickup"],
-  "tdm": ["ctdm", "qcon_tdm"],
-  "ctf": ["ctf", "ctf2", "qcon_ctf"]
-}
-var MinRequiredPlayersForGametype = {
-  "duel": 2,
-  "ffa": 4,
-  "ca": 8,
-  "tdm": 8,
-  "ctf": 8
-}
-var ValidateMatchForGametype = {
-  "duel": function (json) { return json.matchStats.GAME_LENGTH >= 10 * 60 },
-  "ffa": function (json) { return json.matchStats.FRAG_LIMIT >= 50 },
-  "ca": function (json) { return Math.max(json.matchStats.TSCORE0, json.matchStats.TSCORE1) >= 10 /* old JSONS have no ROUND_LIMIT */ },
-  "tdm": function (json) { return Math.max(json.matchStats.TSCORE0, json.matchStats.TSCORE1) >= 100 || json.matchStats.GAME_LENGTH >= 15 * 10 },
-  "ctf": function (json) { return Math.max(json.matchStats.TSCORE0, json.matchStats.TSCORE1) >= 8 || json.matchStats.GAME_LENGTH >= 15 * 10 }
-}
-var strategy = {
-  validFactories: ValidFactoriesForGametype[gametype],
-  minPlayers: MinRequiredPlayersForGametype[gametype],
-  validateGame: ValidateMatchForGametype[gametype]
-}
+// values for DB column games.g2_status
+var
+  ERR_NOTRATED = 0,
+  ERR_OK = 1,
+  ERR_ABORTED = 2,
+  ERR_ROUND_OR_TIMELIMIT = 3,
+  ERR_BOTMATCH = 4,
+  ERR_TEAMTIMEDIFF = 5,
+  ERR_MINPLAYERS = 6;
 
 function main() {
   _config = JSON.parse(fs.readFileSync(__dirname + "/cfg.json"));
 
   //Q.longStackSupport = true;
 
+  strategy = createGameTypeStrategy(gametype);
+
   dbConnect()
     .then(function (cli) {
-      return getMatchIds(cli)
+      return resetRatingsInDb(cli)
+        .then(function() { return getMatchIds(cli); })
         .then(function (matches) { return processMatches(cli, matches); })
         .then(function (results) { return saveResults(cli, results)})
         .then(printResults)
@@ -59,6 +47,37 @@ function main() {
     })
     .finally(function () { pg.end(); })
     .done();
+}
+
+function createGameTypeStrategy(gametype) {
+  var ValidFactoriesForGametype = {
+    "duel": ["duel", "qcon_duel"],
+    "ffa": ["ffa", "mg_ffa_classic"],
+    "ca": ["ca", "capickup"],
+    "tdm": ["ctdm", "qcon_tdm"],
+    "ctf": ["ctf", "ctf2", "qcon_ctf"]
+  }
+  var MinRequiredPlayersForGametype = {
+    "duel": 2,
+    "ffa": 4,
+    "ca": 8,
+    "tdm": 8,
+    "ctf": 8
+  }
+  var ValidateMatchForGametype = {
+    "duel": function (json) { return json.matchStats.GAME_LENGTH >= 10 * 60 },
+    "ffa": function (json) { return json.matchStats.FRAG_LIMIT >= 50 },
+    "ca": function (json) { return Math.max(json.matchStats.TSCORE0, json.matchStats.TSCORE1) >= 10 /* old JSONS have no ROUND_LIMIT */ },
+    "tdm": function (json) { return Math.max(json.matchStats.TSCORE0, json.matchStats.TSCORE1) >= 100 || json.matchStats.GAME_LENGTH >= 15 * 10 },
+    "ctf": function (json) { return Math.max(json.matchStats.TSCORE0, json.matchStats.TSCORE1) >= 8 || json.matchStats.GAME_LENGTH >= 15 * 10 }
+  }
+
+  return {
+    validFactories: ValidFactoriesForGametype[gametype],
+    minPlayers: MinRequiredPlayersForGametype[gametype],
+    validateGame: ValidateMatchForGametype[gametype],
+    maxTeamTimeDiff: 10 * 60
+  }
 }
 
 function dbConnect() {
@@ -74,6 +93,16 @@ function dbConnect() {
   return defConnect.promise;
 }
 
+function resetRatingsInDb(cli) {
+  if (!resetRating)
+    return Q();
+
+  return Q
+    .ninvoke(cli, "query", { name: "g2_reset1", text: "update player_elos set g2_games=0, g2_r=1500, g2_rd=300, g2_vol=0.06 where game_type_cd=$1", values: [gametype] })
+    .then(function () { return Q.ninvoke(cli, "query", { name: "g2_reset2", text: "update player_game_stats pgs set g2_score=null, g2_delta_r=null, g2_delta_rd=null from games g where pgs.game_id=g.game_id and g.game_type_cd=$1", values: [gametype] }) })
+    .then(function() { return Q.ninvoke(cli, "query", "update games set g2_status=0") });
+}
+
 function getMatchIds(cli) {
   return Q.ninvoke(cli, "query", "select match_id, start_dt, game_id from games where game_type_cd='" + gametype + "' and mod in ('" + strategy.validFactories.join("','") + "') order by start_dt")
     .then(function (result) {
@@ -83,7 +112,7 @@ function getMatchIds(cli) {
 
 function processMatches(cli, matches) {
   return matches.reduce(function (chain, match) {
-    return chain.then(function (ok) { return /* ok || */ processMatch(cli, match.match_id, match.date, match.game_id); });
+    return chain.then(function () { return /* ok || */ processMatch(cli, match.match_id, match.date, match.game_id); });
   }, Q())
     .then(function () { return playersBySteamId; });
 }
@@ -138,17 +167,24 @@ function getDateFolder(date, deltaDays) {
 
 function processFile(cli, gameId, file) {
   return extractDataFromJson(file)
-    .then(function (playerRanking) {
-      if (!playerRanking || playerRanking.length == 0)
-        return false;
+    .then(function (result) {    
+      // store a status code why the game was not rated
+      if (typeof (result) === "number")
+        return setGameStatus(result).then(Q(false));
 
+      var playerRanking = result;
       var matches = [];
+      var players = [];
       for (var i = 0; i < playerRanking.length; i++) {
         var r1 = playerRanking[i];
         var p1 = playersBySteamId[r1.id];
+        p1.score = Math.round(r1.score);
+        players.push(p1);
         ++p1.games;
         if (r1.win)
           ++p1.wins;
+        p1.rating.oldR = p1.rating.getRating();
+        p1.rating.oldRd = p1.rating.getRd();
 
         for (var j = i + 1; j < playerRanking.length; j++) {
           var r2 = playerRanking[j];
@@ -159,8 +195,34 @@ function processFile(cli, gameId, file) {
       }
 
       g2.updateRatings(matches);
-      return true;
+
+      return savePlayerGameRatingChange(players)
+        .then(function() { return setGameStatus(ERR_OK) })
+        .then(Q(true));
     });
+
+  function savePlayerGameRatingChange(players) {
+    return players.reduce(function (chain, p) {
+      return chain.then(function () {
+        return getPlayerId(cli, p)
+          .then(function (pid) {
+            var val = [gameId, pid, p.score, p.rating.getRating() - p.rating.oldR, p.rating.getRd() - p.rating.oldRd];
+            return Q.ninvoke(cli, "query", { name: "pgs_upd", text: "update player_game_stats set g2_score=$3, g2_delta_r=$4, g2_delta_rd=$5 where game_id=$1 and player_id=$2", values: val })
+              .then(function (result) {
+                if (result.rowCount == 0)
+                  console.log("player_game_stats not found: gid=" + gameId + ", pid=" + pid);
+                return Q();
+              });
+          });
+      });
+    }, Q());
+  }
+
+  function setGameStatus(status) {
+    return Q.ninvoke(cli, "query", { name: "game_upd", text: "update games set g2_status=$2 where game_id=$1", values: [gameId, status] })
+      .then(function () { return false; });
+  }
+
 }
 
 function extractDataFromJson(path) {
@@ -170,11 +232,8 @@ function extractDataFromJson(path) {
     .then(function(json) {
       var raw = JSON.parse(json);
 
-      if (raw.matchStats.ABORTED
-        || raw.matchStats.GAME_TYPE.toLowerCase() != gametype
-        || strategy.validFactories.indexOf(raw.matchStats.GAME_TYPE.toLowerCase()) < 0
-        || !strategy.validateGame(raw)) // TODO
-        return null;
+      if (raw.matchStats.ABORTED) return ERR_ABORTED;
+      if (!strategy.validateGame(raw)) return ERR_ROUND_OR_TIMELIMIT;
 
       // aggregate total time, damage and score of player during a match (could have been switching teams)
       var playerData = {}
@@ -182,7 +241,7 @@ function extractDataFromJson(path) {
       var timeRed = 0, timeBlue = 0;
       raw.playerStats.forEach(function (p) {
         botmatch |= p.STEAM_ID == "0";
-        if (p.ABORTED || p.WARMUP || botmatch)
+        if (p.WARMUP || botmatch) // p.ABORTED must be counted for team switchers
           return;
 
         var pd = playerData[p.STEAM_ID];
@@ -191,7 +250,7 @@ function extractDataFromJson(path) {
           playerData[p.STEAM_ID] = pd;
         }
 
-        var time = Math.max(p.PLAY_TIME, raw.matchStats.GAME_LENGTH);
+        var time = Math.min(p.PLAY_TIME, raw.matchStats.GAME_LENGTH);
         if (p.TEAM == 2) {
           timeBlue += time;
           pd.timeBlue += time;
@@ -208,9 +267,11 @@ function extractDataFromJson(path) {
       });
 
       if (botmatch)
-        return null;
-      if (timeBlue != 0 && Math.abs(timeRed - timeBlue) > MaxAllowedTeamPlaytimeDelta)
-        return null;
+        return ERR_BOTMATCH;
+      if (timeBlue != 0 && Math.abs(timeRed - timeBlue) > strategy.maxTeamTimeDiff) {
+        //console.log(raw.matchStats.MATCH_GUID + ": timeRed=" + timeRed + ", timeBlue=" + timeBlue);
+        return ERR_TEAMTIMEDIFF;
+      }
 
       // calculate a rankingScore for each player
       var players = [];
@@ -233,7 +294,7 @@ function extractDataFromJson(path) {
         players.push({ id: pd.id, score: rankingScore, win: pd.win });
       }
 
-      return players.length < strategy.minPlayers ? null : players;
+      return players.length < strategy.minPlayers ? ERR_MINPLAYERS : players;
     });
 }
 
@@ -261,16 +322,7 @@ function saveResults(cli, players) {
         .then(function(result) {
           if (result.rowCount == 1) return Q();
 
-          var getPid = player.pid ? Q(player.pid) : 
-            Q.ninvoke(cli, "query", { name: "elo_sel", text: "select player_id from hashkeys where hashkey=$1", values: [player.id] })
-            .then(function (result) {
-              if (result.rows.length == 0) {
-                console.log("no player with steam-id " + player.id);
-                return null;
-              }
-              return player.pid = result.rows[0].player_id;
-            });
-          return getPid
+          return getPlayerId(cli, player)
             .then(function(pid) {
               if (!pid) return null;
               val[0] = pid;
@@ -279,7 +331,21 @@ function saveResults(cli, players) {
         });
     });
   }, Q())
-  .then(function () { return players; });;
+  .then(function () { return players; });
+}
+
+function getPlayerId(cli, player) {
+  if (player.pid)
+    return Q(player.pid);
+
+  return Q.ninvoke(cli, "query", { name: "player_by_steamid", text: "select player_id from hashkeys where hashkey=$1", values: [player.id] })
+    .then(function (result) {
+      if (result.rows.length == 0) {
+        console.log("no player with steam-id " + player.id);
+        return null;
+      }
+      return player.pid = result.rows[0].player_id;
+    });
 }
 
 function printResults() {
