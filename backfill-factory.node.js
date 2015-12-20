@@ -21,7 +21,7 @@ function dbConnect() {
 }
 
 function getMatchIds(cli) {
-  return Q.ninvoke(cli, "query", "select match_id, start_dt, game_id from games where game_type_cd<>'ctf' ")
+  return Q.ninvoke(cli, "query", "select match_id, start_dt, game_id from games where game_type_cd='ctf' ")
     .then(function(result) {
       var matches = {};
       result.rows.forEach(function(row) {
@@ -43,10 +43,15 @@ function processMatches(cli, matches) {
 
 function processMatch(cli, matchId, date, gameId) {
   var deltas = [0, +1, -1];
+  var subfolders = [];
+  for (var i = 0; i < 3; i++)
+    subfolders.push(getDateFolder(date, deltas[i]));
+  subfolders.push("omega/");
+
   var data = null;
-  for (var i = 0; i < 3; i++) {
+  for (var i = 0; i < subfolders.length; i++) {
     try {
-      var file = __dirname + "/" + _config.feeder.jsondir + getDateFolder(date, deltas[i]) + matchId + ".json.gz";
+      var file = __dirname + "/" + _config.feeder.jsondir + subfolders[i] + matchId + ".json.gz";
       data = fs.readFileSync(file);
       break;
     } 

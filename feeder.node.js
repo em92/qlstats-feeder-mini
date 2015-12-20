@@ -442,12 +442,11 @@ function processGame(game) {
 function exportMatchInformation(gt, game, report) {
   report.push("0 " + game.serverIp); // not XonStat standard
   report.push("1 " + game.gameEndTimestamp); // not XonStat standard
-  report.push("2 " + game.matchStats.FACTORY);
   report.push("S " + game.matchStats.SERVER_TITLE);
   report.push("I " + game.matchStats.MATCH_GUID);
   report.push("G " + gt);
   report.push("M " + game.matchStats.MAP);
-  report.push("O baseq3");
+  report.push("O " + game.matchStats.FACTORY);
   report.push("V 7"); // CA must be >= 6 
   report.push("R .1");
   report.push("U " + game.serverPort);
