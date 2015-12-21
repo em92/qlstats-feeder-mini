@@ -9,10 +9,10 @@
 // TODO: turn this into command line args
 var gametype = "ctf";
 var resetRating = true;
-
+var updateDatabase = false;
 
 var _config;
-var g2 = new glicko2.Glicko2({ tau: 0.5, rating: 1500, rd: 300, vol: 0.06 });
+var g2 = new glicko2.Glicko2({ tau: 0.5, rating: 1500, rd: 150, vol: 0.06 });
 var playersBySteamId = {};
 var strategy;
 
@@ -94,7 +94,7 @@ function dbConnect() {
 }
 
 function resetRatingsInDb(cli) {
-  if (!resetRating)
+  if (!resetRating || !updateDatabase)
     return Q();
 
   return Q
@@ -141,7 +141,6 @@ function processMatch(cli, matchId, date, gameId) {
     return processFile(cli, gameId, file)
       .catch(function (err) {
         console.log("Failed to process " + file + ": " + err);
-        //throw err;
         return false;
       });
   }
@@ -186,6 +185,9 @@ function processFile(cli, gameId, file) {
         p1.rating.oldR = p1.rating.getRating();
         p1.rating.oldRd = p1.rating.getRd();
 
+        if (gameId == 863)
+          console.log(p1.name + ": r=" + p1.rating.oldR + ", rd=" + p1.rating.oldRd + ", g=" + p1.games + ", s=" + p1.score);
+
         for (var j = i + 1; j < playerRanking.length; j++) {
           var r2 = playerRanking[j];
           var p2 = playersBySteamId[r2.id];
@@ -202,10 +204,52 @@ function processFile(cli, gameId, file) {
     });
 
   function savePlayerGameRatingChange(players) {
-    return players.reduce(function (chain, p) {
+    players.sort(function (a, b) { return a.score - b.score; });
+
+    // upperCaps[i] := minimum old rating of all players who performed better than player[i]
+    var c = players.length - 1;
+    var upperCapsOld = [], upperCapsNew = [];
+    var minOld = players[c].rating.oldR;
+    var minNew = players[c].rating.getRating();
+    for (var i = c; i >= 0; i--) {
+      upperCapsOld[i] = minOld;
+      upperCapsNew[i] = minNew;
+      minOld = Math.min(minOld, players[i].rating.oldR);
+      minNew = Math.min(minNew, players[i].rating.getRating());
+    }
+    var lowerCapOld = players[0].rating.oldR;
+    var lowerCapNew = players[0].rating.getRating(); //players[0].rating.oldR - players[0].rating.oldRd;
+    console.log("upperCaps=" + JSON.stringify(upperCapsNew));
+
+    return players.reduce(function (chain, p, i) {
       return chain.then(function () {
         return getPlayerId(cli, p)
           .then(function (pid) {
+            if (gameId == 863)
+              console.log(p.name + ": r=" + p.rating.getRating() + ", rd=" + p.rating.getRd());
+
+            // HACK: cap excessive rating changes
+            // This happens when a low/un-rated player performs well against many higher rated players in a single match. 
+            // He gets a rating boost out of each player-pair match and his rating may overshoot the players' which performed better in this match.
+            // The trick here is to cap the new rating to be <= the old rating of all players who performed better in the match and >= all players who performed worse.
+            // The RD should also be adjusted, but I don't know how.
+            if (p.rating.oldR < upperCapsOld[i] && p.rating.getRating() > upperCapsNew[i]) {
+              p.rating.setRating(upperCapsNew[i]);
+              console.log("upper clamp");
+            } else if (p.rating.oldR > lowerCapOld && p.rating.getRating() < lowerCapNew) {
+              p.rating.setRating(lowerCapNew);
+              console.log("lower clamp");
+            }
+            if (p.rating.getRd() > g2._default_rd) {
+              p.rating.setRd(g2._default_rd);
+              console.log("rd clamp");
+            }
+            lowerCapOld = Math.max(lowerCapOld, p.rating.oldR);
+            lowerCapNew = Math.max(lowerCapNew, p.rating.getRating());
+
+            if (!updateDatabase)
+              return Q();
+
             var val = [gameId, pid, p.score, p.rating.getRating() - p.rating.oldR, p.rating.getRd() - p.rating.oldRd];
             return Q.ninvoke(cli, "query", { name: "pgs_upd", text: "update player_game_stats set g2_score=$3, g2_delta_r=$4, g2_delta_rd=$5 where game_id=$1 and player_id=$2", values: val })
               .then(function (result) {
@@ -219,8 +263,9 @@ function processFile(cli, gameId, file) {
   }
 
   function setGameStatus(status) {
-    return Q.ninvoke(cli, "query", { name: "game_upd", text: "update games set g2_status=$2 where game_id=$1", values: [gameId, status] })
-      .then(function () { return false; });
+    if (!updateDatabase)
+      return Q();
+    return Q.ninvoke(cli, "query", { name: "game_upd", text: "update games set g2_status=$2 where game_id=$1", values: [gameId, status] });
   }
 
 }
@@ -238,74 +283,104 @@ function extractDataFromJson(path) {
       // aggregate total time, damage and score of player during a match (could have been switching teams)
       var playerData = {}
       var botmatch = false;
-      var timeRed = 0, timeBlue = 0;
-      raw.playerStats.forEach(function (p) {
-        botmatch |= p.STEAM_ID == "0";
-        if (p.WARMUP || botmatch) // p.ABORTED must be counted for team switchers
-          return;
-
-        var pd = playerData[p.STEAM_ID];
-        if (!pd) {
-          pd = { id: p.STEAM_ID, name: p.NAME, timeRed: 0, timeBlue: 0, score: 0, dg: 0, dt: 0, win: false };
-          playerData[p.STEAM_ID] = pd;
-        }
-
-        var time = Math.min(p.PLAY_TIME, raw.matchStats.GAME_LENGTH);
-        if (p.TEAM == 2) {
-          timeBlue += time;
-          pd.timeBlue += time;
-        }
-        else {
-          timeRed += time;
-          pd.timeRed += time;
-        }
-        pd.score += p.SCORE;
-        pd.dg += p.DAMAGE.DEALT;
-        pd.dt += p.DAMAGE.TAKEN;
-        if (p.RANK == 1)
-          pd.win = true;
-      });
+      var timeRed = 0, timeBlue = 0, isTeamGame;
+      aggregateTimeAndScorePerPlayer();
 
       if (botmatch)
         return ERR_BOTMATCH;
-      if (timeBlue != 0 && Math.abs(timeRed - timeBlue) > strategy.maxTeamTimeDiff) {
-        //console.log(raw.matchStats.MATCH_GUID + ": timeRed=" + timeRed + ", timeBlue=" + timeBlue);
+      if (timeBlue != 0 && Math.abs(timeRed - timeBlue) > strategy.maxTeamTimeDiff)
         return ERR_TEAMTIMEDIFF;
+
+      var players = calculatePlayerRanking();
+      if (players.length < strategy.minPlayers)
+        return ERR_MINPLAYERS;
+      return players;
+
+      function aggregateTimeAndScorePerPlayer() {
+        raw.playerStats.forEach(function (p) {
+          botmatch |= p.STEAM_ID == "0";
+          if (p.WARMUP || botmatch) // p.ABORTED must be counted for team switchers
+            return;
+
+          var pd = playerData[p.STEAM_ID];
+          if (!pd) {
+            pd = { id: p.STEAM_ID, name: p.NAME, timeRed: 0, timeBlue: 0, score: 0, k:0, d:0, dg: 0, dt: 0, win: false };
+            playerData[p.STEAM_ID] = pd;
+          }
+
+          var time = Math.min(p.PLAY_TIME, raw.matchStats.GAME_LENGTH);  // pauses and whatever QL bugs can cause excessive PLAY_TIME
+          if (p.TEAM == 2) {
+            timeBlue += time;
+            pd.timeBlue += time;
+          }
+          else {
+            timeRed += time;
+            pd.timeRed += time;
+          }
+          pd.score += p.SCORE;
+          pd.dg += p.DAMAGE.DEALT;
+          pd.dt += p.DAMAGE.TAKEN;
+          pd.k += p.KILLS;
+          pd.d += p.DEATHS;
+          if (p.RANK == 1)
+            pd.win = true;
+          isTeamGame |= p.hasOwnProperty("TEAM");
+        });
       }
 
-      // calculate a rankingScore for each player
-      var players = [];
-      for (var steamId in playerData) {
-        if (!playerData.hasOwnProperty(steamId)) continue;
-        var pd = playerData[steamId];
-        if (pd.timeRed + pd.timeBlue < raw.matchStats.GAME_LENGTH / 2)
-          continue;
+      function calculatePlayerRanking() {
+        var players = [];
+        for (var steamId in playerData) {
+          if (!playerData.hasOwnProperty(steamId)) continue;
+          var pd = playerData[steamId];
+          if (pd.timeRed + pd.timeBlue < raw.matchStats.GAME_LENGTH / 2) // minumum 50% participation
+            continue;
+          if (pd.dg < 500 || pd.dt / pd.dg >= 10.0) // skip AFK players
+            continue;
 
-        if (!playersBySteamId[pd.id])
-          playersBySteamId[pd.id] = { id: pd.id, name: pd.name, games: 0, wins: 0, rating: g2.makePlayer() };
+          if (!playersBySteamId[pd.id])
+            playersBySteamId[pd.id] = { id: pd.id, name: pd.name, games: 0, wins: 0, rating: g2.makePlayer() };
 
-        if (raw.matchStats.hasOwnProperty("TSCORE0")) {
-          var winningTeam = raw.matchStats.TSCORE0 > raw.matchStats.TSCORE1 ? -1 : raw.matchStats.TSCORE0 == raw.matchStats.TSCORE1 ? 0 : +1;
-          var playerTeam = pd.timeRed >= pd.timeBlue ? -1 : +1;
-          pd.win = playerTeam == winningTeam;
+          if (isTeamGame) {
+            var winningTeam = raw.matchStats.TSCORE0 > raw.matchStats.TSCORE1 ? -1 : raw.matchStats.TSCORE0 == raw.matchStats.TSCORE1 ? 0 : +1;
+            var playerTeam = pd.timeRed >= pd.timeBlue ? -1 : +1;
+            pd.win = playerTeam == winningTeam;
+          }
+
+          var rankingScore = calcPlayerPerformance(pd, raw);
+          players.push({ id: pd.id, score: rankingScore, win: pd.win });
         }
-
-        var rankingScore = calcPlayerPerformance(pd, raw);
-        players.push({ id: pd.id, score: rankingScore, win: pd.win });
+        return players;
       }
-
-      return players.length < strategy.minPlayers ? ERR_MINPLAYERS : players;
     });
 }
 
 function calcPlayerPerformance(p, raw) {
-  if (gametype == "ctf")
-    return (p.dt == 0 ? 2 : Math.min(2, Math.max(0.5, p.dg / p.dt))) * (p.score + p.dg / 20) * raw.matchStats.GAME_LENGTH / (p.timeRed + p.timeBlue) + (p.win ? 300 : 0);
+  var timeFactor = raw.matchStats.GAME_LENGTH / (p.timeRed + p.timeBlue);
 
-  return p.score;
+  // CTF score formula inspired by http://bot.xurv.org/rating.pdf
+  if (gametype == "ctf")
+    return (p.dt == 0 ? 2 : Math.min(2, Math.max(0.5, p.dg / p.dt))) * (p.score + p.dg / 20) * timeFactor + (p.win ? 300 : 0);
+
+  // TDM performance formula inspired by http://qlstats.info/about-ql-statistics.html
+  if (gametype == "tdm") 
+    return ((p.k - p.d) * 5 + (p.dg - p.dt) / 100 * 4 + p.dg / 100 * 3) * timeFactor;
+
+  if (gametype == "duel")
+    return p.score;
+
+  // TODO: derive number of rounds a player played from the ZMQ events and add it to the player results
+  // then use score/rounds for CA
+
+
+  // FFA, FT: score/time
+  return p.score * timeFactor;
 }
 
 function saveResults(cli, players) {
+  if (!updateDatabase)
+    return Q(players);
+
   var list = [];
   for (var steamId in players) {
     if (!players.hasOwnProperty(steamId)) continue;
@@ -316,22 +391,16 @@ function saveResults(cli, players) {
 
   return list.reduce(function(chain, player) {
     return chain.then(function () {
-      var val = [player.id, gametype, player.games, player.rating.getRating(), player.rating.getRd(), player.rating.getVol()];
+      var val = [player.pid, gametype, player.games, player.rating.getRating(), player.rating.getRd(), player.rating.getVol()];
       // try update and if rowcount is 0, execute an insert
-      return Q.ninvoke(cli, "query", { name: "elo_upd", text: "update player_elos e set g2_games=$3, g2_r=$4, g2_rd=$5, g2_vol=$6 from hashkeys k where k.player_id=e.player_id and k.hashkey=$1 and e.game_type_cd=$2", values: val })
+      return Q.ninvoke(cli, "query", { name: "elo_upd", text: "update player_elos set g2_games=$3, g2_r=$4, g2_rd=$5, g2_vol=$6 where player_id=$1 and game_type_cd=$2", values: val })
         .then(function(result) {
           if (result.rowCount == 1) return Q();
-
-          return getPlayerId(cli, player)
-            .then(function(pid) {
-              if (!pid) return null;
-              val[0] = pid;
-              return Q.ninvoke(cli, "query", { name: "elo_ins", text: "insert into player_elos (player_id, game_type_cd, g2_games, g2_r, g2_rd, g2_vol, elo) values ($1,$2,$3,$4,$5,$6, 100)", values: val });
-            });
+          return Q.ninvoke(cli, "query", { name: "elo_ins", text: "insert into player_elos (player_id, game_type_cd, g2_games, g2_r, g2_rd, g2_vol, elo) values ($1,$2,$3,$4,$5,$6, 100)", values: val });
         });
     });
   }, Q())
-  .then(function () { return players; });
+  .then(Q(players));
 }
 
 function getPlayerId(cli, player) {
@@ -353,9 +422,11 @@ function printResults() {
   for (var key in playersBySteamId) {
     if (!playersBySteamId.hasOwnProperty(key)) continue;
     var p = playersBySteamId[key];
+    p.r1 = p.rating.getRating() - p.rating.getRd();
     players.push(p);
   }
   players.sort(function (a, b) {
+    return -(a.r1 - b.r1);
     a = a.rating;
     b = b.rating;
     var c = a.getRating() - b.getRating();
@@ -366,8 +437,9 @@ function printResults() {
   players.forEach(function (p) {
     if (p.games < 10) return;
     console.log(p.name
-      + ", r=" + Math.round(p.rating.getRating())
-      + " (rd=" + Math.round(p.rating.getRd())
+      + ": r-rd=" + Math.round(p.r1)
+      + ", (r=" + Math.round(p.rating.getRating())
+      + ", rd=" + Math.round(p.rating.getRd())
       + ", vol=" + round3(p.rating.getVol())
       + "), games: " + p.games
       + ", wins: " + Math.round(p.wins * 1000 / p.games) / 10 + "%");
