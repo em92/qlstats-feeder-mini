@@ -2,7 +2,7 @@
   fs = require("graceful-fs"),
   pg = require("pg"),
   zlib = require("zlib"),
-  glicko2 = require("glicko2"),
+  glicko = require("./glicko1"),
   Q = require("q");
 
 
@@ -10,9 +10,16 @@
 var gametype = "ctf";
 var resetRating = true;
 var updateDatabase = false;
+var printResult = true;
+var applyClamp = false;
+var printClamp = false;
 
 var _config;
-var g2 = new glicko2.Glicko2({ tau: 0.5, rating: 1500, rd: 150, vol: 0.06 });
+
+
+// calculate a value for "c" so that an average RD value of 85 changes back to 350 when a player is inactive for 180 rating periods (=days)
+var g2 = new glicko.Glicko({ rating: 1500, rd: 350, c: Math.sqrt((Math.pow(350, 2) - Math.pow(82, 2)) / 180) });
+
 var playersBySteamId = {};
 var strategy;
 
@@ -71,12 +78,20 @@ function createGameTypeStrategy(gametype) {
     "tdm": function (json) { return Math.max(json.matchStats.TSCORE0, json.matchStats.TSCORE1) >= 100 || json.matchStats.GAME_LENGTH >= 15 * 10 },
     "ctf": function (json) { return Math.max(json.matchStats.TSCORE0, json.matchStats.TSCORE1) >= 8 || json.matchStats.GAME_LENGTH >= 15 * 10 }
   }
+  var IsDrawForGametype = {
+    "duel": function (a, b) { return false; },
+    "ffa": function (a, b) { return Math.abs(a - b) <= 5; },
+    "ca": function (a, b) { return Math.abs(a - b) <= 2 },
+    "tdm": function (a, b) { return a / b <= 1.1 && b / a <= 1.1 },
+    "ctf": function (a, b) { return a / b <= 1.1 && b / a <= 1.1 }
+  }
 
   return {
     validFactories: ValidFactoriesForGametype[gametype],
     minPlayers: MinRequiredPlayersForGametype[gametype],
     validateGame: ValidateMatchForGametype[gametype],
-    maxTeamTimeDiff: 10 * 60
+    maxTeamTimeDiff: 10 * 60,
+    isDraw: IsDrawForGametype[gametype]
   }
 }
 
@@ -111,9 +126,22 @@ function getMatchIds(cli) {
 }
 
 function processMatches(cli, matches) {
+  var currentRatingPeriod = 0;
   return matches.reduce(function (chain, match) {
-    return chain.then(function () { return /* ok || */ processMatch(cli, match.match_id, match.date, match.game_id); });
+    return chain.then(function() {
+      var period = glickoPeriod(match.date);
+      if (period != currentRatingPeriod) {
+        g2.calculatePlayersRatings(currentRatingPeriod);
+        g2.cleanPreviousMatches();
+        currentRatingPeriod = period;
+      }
+      return /* ok || */ processMatch(cli, match.match_id, match.date, match.game_id);
+    });
   }, Q())
+    .then(function() {
+      g2.calculatePlayersRatings(currentRatingPeriod);
+      //g2.setPeriod(glickoPeriod(new Date()));
+    })
     .then(function () { return playersBySteamId; });
 }
 
@@ -150,6 +178,7 @@ function processMatch(cli, matchId, date, gameId) {
 }
 
 function getDateFolder(date, deltaDays) {
+  // match .json.gz files are stored in YYYY-MM/DD/ folders
   var newDate;
   if (deltaDays) {
     newDate = new Date(date.getTime());
@@ -170,7 +199,7 @@ function processFile(cli, gameId, file) {
       // store a status code why the game was not rated
       if (typeof (result) === "number")
         return setGameStatus(result).then(Q(false));
-
+             
       var playerRanking = result;
       var matches = [];
       var players = [];
@@ -191,12 +220,13 @@ function processFile(cli, gameId, file) {
         for (var j = i + 1; j < playerRanking.length; j++) {
           var r2 = playerRanking[j];
           var p2 = playersBySteamId[r2.id];
-          var result = r1.score > r2.score ? 1 : r1.score < r2.score ? 0 : 0.5;
-          matches.push([p1.rating, p2.rating, result]);
+          var result = strategy.isDraw(r1.score, r2.score) ? 0.5 : r1.score > r2.score ? 1 : 0;
+          //matches.push([p1.rating, p2.rating, result]);
+
+          g2.addMatch(p1.rating, p2.rating, result);
         }
       }
 
-      g2.updateRatings(matches);
 
       return savePlayerGameRatingChange(players)
         .then(function() { return setGameStatus(ERR_OK) })
@@ -207,20 +237,23 @@ function processFile(cli, gameId, file) {
     players.sort(function (a, b) { return a.score - b.score; });
 
     // upperCaps[i] := minimum old rating of all players who performed better than player[i]
+    /*
     var c = players.length - 1;
     var upperCapsOld = [], upperCapsNew = [];
     var minOld = players[c].rating.oldR;
-    var minNew = players[c].rating.getRating();
+    var minNew = Math.round(players[c].rating.getRating());
     for (var i = c; i >= 0; i--) {
+      var r = Math.round(players[i].rating.getRating());
+      players[i].rating.setRating(r);
       upperCapsOld[i] = minOld;
       upperCapsNew[i] = minNew;
       minOld = Math.min(minOld, players[i].rating.oldR);
-      minNew = Math.min(minNew, players[i].rating.getRating());
+      minNew = Math.min(minNew, r);
     }
     var lowerCapOld = players[0].rating.oldR;
     var lowerCapNew = players[0].rating.getRating(); //players[0].rating.oldR - players[0].rating.oldRd;
-    console.log("upperCaps=" + JSON.stringify(upperCapsNew));
-
+    if (printClamp) console.log("upperCaps=" + JSON.stringify(upperCapsNew.map(function (val) { return Math.round(val); })));
+    */
     return players.reduce(function (chain, p, i) {
       return chain.then(function () {
         return getPlayerId(cli, p)
@@ -231,21 +264,23 @@ function processFile(cli, gameId, file) {
             // HACK: cap excessive rating changes
             // This happens when a low/un-rated player performs well against many higher rated players in a single match. 
             // He gets a rating boost out of each player-pair match and his rating may overshoot the players' which performed better in this match.
-            // The trick here is to cap the new rating to be <= the old rating of all players who performed better in the match and >= all players who performed worse.
+            // The idea is to cap the new rating to be <= all ratings of players who performed better in this match.
             // The RD should also be adjusted, but I don't know how.
-            if (p.rating.oldR < upperCapsOld[i] && p.rating.getRating() > upperCapsNew[i]) {
-              p.rating.setRating(upperCapsNew[i]);
-              console.log("upper clamp");
-            } else if (p.rating.oldR > lowerCapOld && p.rating.getRating() < lowerCapNew) {
-              p.rating.setRating(lowerCapNew);
-              console.log("lower clamp");
+            if (applyClamp) {
+              if (p.rating.oldR < upperCapsOld[i] && p.rating.getRating() > upperCapsNew[i]) {
+                if (printClamp) console.log("upper clamp " + p.rating.getRating() + ">" + upperCapsNew[i]);
+                p.rating.setRating(upperCapsNew[i]);
+              } else if (p.rating.oldR > lowerCapOld && p.rating.getRating() < lowerCapNew) {
+                if (printClamp) console.log("lower clamp " + p.rating.getRating() + "<" + lowerCapNew);
+                p.rating.setRating(lowerCapNew);
+              }
+              lowerCapOld = Math.max(lowerCapOld, p.rating.oldR);
+              lowerCapNew = Math.max(lowerCapNew, p.rating.getRating());
             }
             if (p.rating.getRd() > g2._default_rd) {
+              if (printClamp) console.log("rd clamp " + p.rating.getRd());
               p.rating.setRd(g2._default_rd);
-              console.log("rd clamp");
             }
-            lowerCapOld = Math.max(lowerCapOld, p.rating.oldR);
-            lowerCapNew = Math.max(lowerCapNew, p.rating.getRating());
 
             if (!updateDatabase)
               return Q();
@@ -377,6 +412,10 @@ function calcPlayerPerformance(p, raw) {
   return p.score * timeFactor;
 }
 
+function glickoPeriod(date) {
+  return Math.floor(date.getTime() / 1000 / 60 / 60 / 24);
+}
+
 function saveResults(cli, players) {
   if (!updateDatabase)
     return Q(players);
@@ -418,6 +457,11 @@ function getPlayerId(cli, player) {
 }
 
 function printResults() {
+  if (!printResult)
+    return playersBySteamId;
+
+  var period = glickoPeriod(new Date());
+  g2.setPeriod(period);
   var players = [];
   for (var key in playersBySteamId) {
     if (!playersBySteamId.hasOwnProperty(key)) continue;
@@ -435,7 +479,7 @@ function printResults() {
     return -c;
   });
   players.forEach(function (p) {
-    if (p.games < 10) return;
+    if (p.games < 5) return;
     console.log(p.name
       + ": r-rd=" + Math.round(p.r1)
       + ", (r=" + Math.round(p.rating.getRating())

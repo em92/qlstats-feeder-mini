@@ -1,0 +1,131 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <SchemaVersion>2.0</SchemaVersion>
+    <ProjectGuid>{e8a8d291-9163-4cde-9ac1-b01e406db719}</ProjectGuid>
+    <ProjectHome />
+    <ProjectView>ShowAllFiles</ProjectView>
+    <StartupFile>rerun-glicko2.node.js</StartupFile>
+    <WorkingDirectory>.</WorkingDirectory>
+    <OutputPath>.</OutputPath>
+    <ProjectTypeGuids>{3AF33F2E-1136-4D97-BBB7-1795711AC8B8};{349c5851-65df-11da-9384-00065b846f21};{9092AA53-FB77-4645-B42D-1CCCA6BD08BD}</ProjectTypeGuids>
+    <TypeScriptSourceMap>true</TypeScriptSourceMap>
+    <TypeScriptModuleKind>CommonJS</TypeScriptModuleKind>
+    <EnableTypeScript>true</EnableTypeScript>
+    <VisualStudioVersion Condition="'$(VisualStudioVersion)' == ''">11.0</VisualStudioVersion>
+    <VSToolsPath Condition="'$(VSToolsPath)' == ''">$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)</VSToolsPath>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)' == 'Debug'" />
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'" />
+  <ItemGroup>
+    <Content Include="post-data.txt" />
+    <Content Include="cfg.json" />
+    <Content Include="cfg2.json" />
+    <Content Include="cfg_api.json" />
+    <Content Include="package.json" />
+    <Content Include="ql-matchdata-sample.json" />
+    <Content Include="README.md" />
+    <Compile Include="backfill-factory.node.js" />
+    <Compile Include="feeder.node.js" />
+    <Compile Include="glicko1.js" />
+    <Compile Include="rerun-glicko2.node.js" />
+    <Compile Include="rerun-jsons.node.js" />
+    <Compile Include="rerun-ts.node.js" />
+    <Compile Include="statsconn.js" />
+    <Compile Include="webadmin.js" />
+    <Compile Include="webapi.js" />
+    <Content Include="htdocs\servers.html" />
+    <Content Include="sample-data\matchreport.json" />
+    <Content Include="sample-data\playerstats1.json" />
+    <Content Include="sample-data\playerstats2.json" />
+    <TypeScriptCompile Include="typings\express\express.d.ts" />
+    <TypeScriptCompile Include="typings\graceful-fs\graceful-fs.d.ts" />
+    <TypeScriptCompile Include="typings\log4js\log4js.d.ts" />
+    <TypeScriptCompile Include="typings\node\node.d.ts" />
+    <TypeScriptCompile Include="typings\pg\pg.d.ts" />
+    <TypeScriptCompile Include="typings\q\Q.d.ts" />
+    <TypeScriptCompile Include="typings\requirejs\require.d.ts" />
+  </ItemGroup>
+  <ItemGroup>
+    <Folder Include="htdocs" />
+    <Folder Include="ql-match-jsons" />
+    <Folder Include="ql-match-jsons\2015-03" />
+    <Folder Include="ql-match-jsons\2015-03\03" />
+    <Folder Include="ql-match-jsons\2015-03\03\ca" />
+    <Folder Include="ql-match-jsons\2015-03\03\ctf" />
+    <Folder Include="ql-match-jsons\2015-03\03\duel" />
+    <Folder Include="ql-match-jsons\2015-03\03\ffa" />
+    <Folder Include="ql-match-jsons\2015-03\03\ft" />
+    <Folder Include="ql-match-jsons\2015-03\03\race" />
+    <Folder Include="ql-match-jsons\2015-03\03\tdm" />
+    <Folder Include="ql-match-jsons\2015-11" />
+    <Folder Include="ql-match-jsons\2015-11\05" />
+    <Folder Include="ql-match-jsons\2015-11\06" />
+    <Folder Include="ql-match-jsons\2015-11\06-duel" />
+    <Folder Include="ql-match-jsons\2015-11\07" />
+    <Folder Include="ql-match-jsons\2015-11\09" />
+    <Folder Include="ql-match-jsons\2015-11\17" />
+    <Folder Include="ql-match-jsons\2015-11\20" />
+    <Folder Include="ql-match-jsons\2015-11\24" />
+    <Folder Include="ql-match-jsons\2015-12" />
+    <Folder Include="ql-match-jsons\2015-12\07" />
+    <Folder Include="ql-match-jsons\2015-12\08" />
+    <Folder Include="ql-match-jsons\2015-12\09" />
+    <Folder Include="ql-match-jsons\2015-12\14" />
+    <Folder Include="ql-match-jsons\2015-12\15" />
+    <Folder Include="ql-match-jsons\errors" />
+    <Folder Include="ql-match-jsons\omega" />
+    <Folder Include="sample-data" />
+    <Folder Include="typings" />
+    <Folder Include="typings\express" />
+    <Folder Include="typings\graceful-fs" />
+    <Folder Include="typings\log4js" />
+    <Folder Include="typings\node" />
+    <Folder Include="typings\pg" />
+    <Folder Include="typings\q" />
+    <Folder Include="typings\requirejs" />
+  </ItemGroup>
+  <Import Project="$(MSBuildToolsPath)\Microsoft.Common.targets" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
+  <!--Do not delete the following Import Project.  While this appears to do nothing it is a marker for setting TypeScript properties before our import that depends on them.-->
+  <Import Project="$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\TypeScript\Microsoft.TypeScript.targets" Condition="False" />
+  <Import Project="$(VSToolsPath)\Node.js Tools\Microsoft.NodejsTools.targets" />
+  <ProjectExtensions>
+    <VisualStudio>
+      <FlavorProperties GUID="{349c5851-65df-11da-9384-00065b846f21}">
+        <WebProjectProperties>
+          <UseIIS>False</UseIIS>
+          <AutoAssignPort>True</AutoAssignPort>
+          <DevelopmentServerPort>0</DevelopmentServerPort>
+          <DevelopmentServerVPath>/</DevelopmentServerVPath>
+          <IISUrl>http://localhost:48022/</IISUrl>
+          <NTLMAuthentication>False</NTLMAuthentication>
+          <UseCustomServer>True</UseCustomServer>
+          <CustomServerUrl>http://localhost:1337</CustomServerUrl>
+          <SaveServerSettingsInUserFile>False</SaveServerSettingsInUserFile>
+        </WebProjectProperties>
+      </FlavorProperties>
+      <FlavorProperties GUID="{349c5851-65df-11da-9384-00065b846f21}" User="">
+        <WebProjectProperties>
+          <StartPageUrl>
+          </StartPageUrl>
+          <StartAction>CurrentPage</StartAction>
+          <AspNetDebugging>True</AspNetDebugging>
+          <SilverlightDebugging>False</SilverlightDebugging>
+          <NativeDebugging>False</NativeDebugging>
+          <SQLDebugging>False</SQLDebugging>
+          <ExternalProgram>
+          </ExternalProgram>
+          <StartExternalURL>
+          </StartExternalURL>
+          <StartCmdLineArguments>
+          </StartCmdLineArguments>
+          <StartWorkingDirectory>
+          </StartWorkingDirectory>
+          <EnableENC>False</EnableENC>
+          <AlwaysStartWebServerOnDebug>False</AlwaysStartWebServerOnDebug>
+        </WebProjectProperties>
+      </FlavorProperties>
+    </VisualStudio>
+  </ProjectExtensions>
+</Project>
