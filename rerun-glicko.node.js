@@ -79,28 +79,32 @@ function createGameTypeStrategy(gametype) {
     "ffa": ["ffa", "mg_ffa_classic"],
     "ca": ["ca", "capickup"],
     "tdm": ["ctdm", "qcon_tdm"],
-    "ctf": ["ctf", "ctf2", "qcon_ctf"]
+    "ctf": ["ctf", "ctf2", "qcon_ctf"],
+    "ft": ["freeze", "cftag", "ft", "ftclassic", "mg_ft_fullclassic", "vft"]
   }
   var MinRequiredPlayersForGametype = {
     "duel": 2,
     "ffa": 4,
     "ca": 8,
     "tdm": 8,
-    "ctf": 8
+    "ctf": 8,
+    "ft": 8
   }
   var ValidateMatchForGametype = {
     "duel": function (json) { return json.matchStats.GAME_LENGTH >= 10 * 60 },
     "ffa": function (json) { return json.matchStats.FRAG_LIMIT >= 50 },
     "ca": function (json) { return Math.max(json.matchStats.TSCORE0, json.matchStats.TSCORE1) >= 10 /* old JSONS have no ROUND_LIMIT */ },
     "tdm": function (json) { return Math.max(json.matchStats.TSCORE0, json.matchStats.TSCORE1) >= 100 || json.matchStats.GAME_LENGTH >= 15 * 10 },
-    "ctf": function (json) { return Math.max(json.matchStats.TSCORE0, json.matchStats.TSCORE1) >= 8 || json.matchStats.GAME_LENGTH >= 15 * 10 }
+    "ctf": function (json) { return Math.max(json.matchStats.TSCORE0, json.matchStats.TSCORE1) >= 8 || json.matchStats.GAME_LENGTH >= 15 * 10 },
+    "ft": function (json) { return Math.max(json.matchStats.TSCORE0, json.matchStats.TSCORE1) >= 8 /* old JSONS have no ROUND_LIMIT */ }
   }
   var IsDrawForGametype = {
     "duel": function (a, b) { return false; },
     "ffa": function (a, b) { return Math.abs(a - b) <= 5; },
     "ca": function (a, b) { return Math.abs(a - b) <= 2 },
     "tdm": function (a, b) { return a / b <= 1.1 && b / a <= 1.1 },
-    "ctf": function (a, b) { return a / b <= 1.1 && b / a <= 1.1 }
+    "ctf": function (a, b) { return a / b <= 1.1 && b / a <= 1.1 },
+    "ft": function (a, b) { return Math.abs(a - b) <= 5; }
   }
 
   return {
@@ -478,7 +482,7 @@ function printResults() {
   
   // bring all RD values to today's date  
   var allRatings = Object.keys(playersBySteamId).map(function (key) { return playersBySteamId[key].rating; });
-  //g2.setPeriod(glickoPeriod(new Date()), allRatings);
+  g2.setPeriod(glickoPeriod(new Date()), allRatings);
 
   var players = [];
   for (var key in playersBySteamId) {
@@ -488,14 +492,7 @@ function printResults() {
     p.r1 = p.rating.getRating() - p.rating.getRd();
     players.push(p);
   }
-  players.sort(function (a, b) {
-    return -(a.r1 - b.r1);
-    a = a.rating;
-    b = b.rating;
-    var c = a.getRating() - b.getRating();
-    if (c == 0) c = a.getRd() - b.getRd();
-    return -c;
-  });
+  players.sort(function (a, b) { return -(a.r1 - b.r1); });
   players.forEach(function (p) {
     if (p.games < 5) return;
     console.log(p.name
