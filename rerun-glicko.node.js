@@ -138,11 +138,11 @@ function processMatches(cli, matches) {
       return /* ok || */ processMatch(cli, match.match_id, match.date, match.game_id);
     });
   }, Q())
-    .then(function() {
-      g2.calculatePlayersRatings(currentRatingPeriod);
-      //g2.setPeriod(glickoPeriod(new Date()));
-    })
-    .then(function () { return playersBySteamId; });
+  .then(function() {
+    g2.calculatePlayersRatings(currentRatingPeriod);
+    g2.setPeriod(Object.keys(playersBySteamId).map(function(key) { return playersBySteamId[key].rating; }), glickoPeriod(new Date()));
+  })
+  .then(function () { return playersBySteamId; });
 }
 
 function processMatch(cli, matchId, date, gameId) {
@@ -201,7 +201,6 @@ function processFile(cli, gameId, file) {
         return setGameStatus(result).then(Q(false));
              
       var playerRanking = result;
-      var matches = [];
       var players = [];
       for (var i = 0; i < playerRanking.length; i++) {
         var r1 = playerRanking[i];
@@ -221,9 +220,8 @@ function processFile(cli, gameId, file) {
           var r2 = playerRanking[j];
           var p2 = playersBySteamId[r2.id];
           var result = strategy.isDraw(r1.score, r2.score) ? 0.5 : r1.score > r2.score ? 1 : 0;
-          //matches.push([p1.rating, p2.rating, result]);
 
-          g2.addMatch(p1.rating, p2.rating, result);
+          g2.addResult(p1.rating, p2.rating, result);
         }
       }
 
@@ -430,7 +428,7 @@ function saveResults(cli, players) {
 
   return list.reduce(function(chain, player) {
     return chain.then(function () {
-      var val = [player.pid, gametype, player.games, player.rating.getRating(), player.rating.getRd(), player.rating.getVol()];
+      var val = [player.pid, gametype, player.games, player.rating.getRating(), player.rating.getRd(), 0];
       // try update and if rowcount is 0, execute an insert
       return Q.ninvoke(cli, "query", { name: "elo_upd", text: "update player_elos set g2_games=$3, g2_r=$4, g2_rd=$5, g2_vol=$6 where player_id=$1 and game_type_cd=$2", values: val })
         .then(function(result) {
@@ -475,7 +473,6 @@ function printResults() {
     b = b.rating;
     var c = a.getRating() - b.getRating();
     if (c == 0) c = a.getRd() - b.getRd();
-    if (c == 0) c = a.getVol() - b.getVol();
     return -c;
   });
   players.forEach(function (p) {
@@ -484,14 +481,11 @@ function printResults() {
       + ": r-rd=" + Math.round(p.r1)
       + ", (r=" + Math.round(p.rating.getRating())
       + ", rd=" + Math.round(p.rating.getRd())
-      + ", vol=" + round3(p.rating.getVol())
       + "), games: " + p.games
       + ", wins: " + Math.round(p.wins * 1000 / p.games) / 10 + "%");
   });
 
   return playersBySteamId;
-
-  function round3(n) { return Math.round(n * 1000) / 1000; }
 }
 
 main();
