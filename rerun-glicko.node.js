@@ -8,11 +8,10 @@
 
 // TODO: turn this into command line args
 var gametype = "ctf";
+var rateEachSingleMatch = true;
 var resetRating = true;
 var updateDatabase = false;
 var printResult = true;
-var applyClamp = false;
-var printClamp = false;
 
 var _config;
 
@@ -43,7 +42,7 @@ function main() {
   dbConnect()
     .then(function (cli) {
       return resetRatingsInDb(cli)
-        .then(function() { return getMatchIds(cli); })
+        .then(function () { return getMatchIds(cli); })
         .then(function (matches) { return processMatches(cli, matches); })
         .then(function (results) { return saveResults(cli, results)})
         .then(printResults)
@@ -53,7 +52,7 @@ function main() {
       throw err;
     })
     .finally(function () { pg.end(); })
-    .done();
+    .done(function () { console.log("-- finished --")});
 }
 
 function createGameTypeStrategy(gametype) {
@@ -127,25 +126,31 @@ function getMatchIds(cli) {
 
 function processMatches(cli, matches) {
   var currentRatingPeriod = 0;
-  return matches.reduce(function (chain, match) {
-    return chain.then(function() {
-      var period = glickoPeriod(match.date);
-      if (period != currentRatingPeriod) {
-        g2.calculatePlayersRatings(currentRatingPeriod);
-        g2.cleanPreviousMatches();
-        currentRatingPeriod = period;
-      }
-      return /* ok || */ processMatch(cli, match.match_id, match.date, match.game_id);
-    });
-  }, Q())
-  .then(function() {
-    g2.calculatePlayersRatings(currentRatingPeriod);
-    g2.setPeriod(Object.keys(playersBySteamId).map(function(key) { return playersBySteamId[key].rating; }), glickoPeriod(new Date()));
-  })
-  .then(function () { return playersBySteamId; });
+
+  var counter = 0;
+  var printProgress = true;
+  console.log("found " + matches.length + " matches");
+  var progressLogger = setInterval(function() { printProgress = true; }, 5000);
+  return matches.reduce(function(chain, match) {
+    return chain.then(function () {
+      ++counter;
+        if (printProgress) {
+          console.log("processed matches: " + counter + " (" + Math.round(counter * 10000 / matches.length) / 100 + "%)");
+          printProgress = false;
+        }
+        g2.setPeriod(glickoPeriod(match.date));
+        return /* ok || */ processMatch(cli, match.match_id, match.date, match.game_id, currentRatingPeriod);
+      });
+    }, Q())
+    .then(function() {
+      var allRatings = Object.keys(playersBySteamId).map(function(key) { return playersBySteamId[key].rating; });
+      g2.setPeriod(glickoPeriod(new Date()), allRatings);
+    })
+    .then(function () { return playersBySteamId; })
+  .finally(function () { clearTimeout(progressLogger)});
 }
 
-function processMatch(cli, matchId, date, gameId) {
+function processMatch(cli, matchId, date, gameId, ratingPeriod) {
   var deltas = [0, +1, -1];
   var subfolders = [];
   for (var i = 0; i < 3; i++)
@@ -166,7 +171,7 @@ function processMatch(cli, matchId, date, gameId) {
   }
 
   if (file) {
-    return processFile(cli, gameId, file)
+    return processFile(cli, gameId, file, ratingPeriod)
       .catch(function (err) {
         console.log("Failed to process " + file + ": " + err);
         return false;
@@ -193,7 +198,7 @@ function getDateFolder(date, deltaDays) {
   return year + "-" + ("0" + (month + 1)).substr(-2) + "/" + ("0" + day).substr(-2) + "/";
 }
 
-function processFile(cli, gameId, file) {
+function processFile(cli, gameId, file, ratingPeriod) {
   return extractDataFromJson(file)
     .then(function (result) {    
       // store a status code why the game was not rated
@@ -224,61 +229,22 @@ function processFile(cli, gameId, file) {
           g2.addResult(p1.rating, p2.rating, result);
         }
       }
+    
+      if (rateEachSingleMatch)
+        g2.calculatePlayersRatings(ratingPeriod);
 
-
-      return savePlayerGameRatingChange(players)
+      return (rateEachSingleMatch ? savePlayerGameRatingChange(players) : Q())
         .then(function() { return setGameStatus(ERR_OK) })
         .then(Q(true));
     });
 
   function savePlayerGameRatingChange(players) {
-    players.sort(function (a, b) { return a.score - b.score; });
-
-    // upperCaps[i] := minimum old rating of all players who performed better than player[i]
-    /*
-    var c = players.length - 1;
-    var upperCapsOld = [], upperCapsNew = [];
-    var minOld = players[c].rating.oldR;
-    var minNew = Math.round(players[c].rating.getRating());
-    for (var i = c; i >= 0; i--) {
-      var r = Math.round(players[i].rating.getRating());
-      players[i].rating.setRating(r);
-      upperCapsOld[i] = minOld;
-      upperCapsNew[i] = minNew;
-      minOld = Math.min(minOld, players[i].rating.oldR);
-      minNew = Math.min(minNew, r);
-    }
-    var lowerCapOld = players[0].rating.oldR;
-    var lowerCapNew = players[0].rating.getRating(); //players[0].rating.oldR - players[0].rating.oldRd;
-    if (printClamp) console.log("upperCaps=" + JSON.stringify(upperCapsNew.map(function (val) { return Math.round(val); })));
-    */
-    return players.reduce(function (chain, p, i) {
+    return players.reduce(function (chain, p) {
       return chain.then(function () {
         return getPlayerId(cli, p)
           .then(function (pid) {
             if (gameId == 863)
               console.log(p.name + ": r=" + p.rating.getRating() + ", rd=" + p.rating.getRd());
-
-            // HACK: cap excessive rating changes
-            // This happens when a low/un-rated player performs well against many higher rated players in a single match. 
-            // He gets a rating boost out of each player-pair match and his rating may overshoot the players' which performed better in this match.
-            // The idea is to cap the new rating to be <= all ratings of players who performed better in this match.
-            // The RD should also be adjusted, but I don't know how.
-            if (applyClamp) {
-              if (p.rating.oldR < upperCapsOld[i] && p.rating.getRating() > upperCapsNew[i]) {
-                if (printClamp) console.log("upper clamp " + p.rating.getRating() + ">" + upperCapsNew[i]);
-                p.rating.setRating(upperCapsNew[i]);
-              } else if (p.rating.oldR > lowerCapOld && p.rating.getRating() < lowerCapNew) {
-                if (printClamp) console.log("lower clamp " + p.rating.getRating() + "<" + lowerCapNew);
-                p.rating.setRating(lowerCapNew);
-              }
-              lowerCapOld = Math.max(lowerCapOld, p.rating.oldR);
-              lowerCapNew = Math.max(lowerCapNew, p.rating.getRating());
-            }
-            if (p.rating.getRd() > g2._default_rd) {
-              if (printClamp) console.log("rd clamp " + p.rating.getRd());
-              p.rating.setRd(g2._default_rd);
-            }
 
             if (!updateDatabase)
               return Q();

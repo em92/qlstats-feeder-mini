@@ -6,13 +6,17 @@
   var mathPow = Math.pow;
   Math.pow = function (b, e) { return e == 2 ? b * b : mathPow(b, e); }
 
-  function Player(rating, rd) {
+  function Player(rating, rd, id) {
     this.__period = 0;
 
     this.setRating(rating);
     this.setRd(rd);
     this.__oldR = rating;
     this.__oldRd = rd;
+
+    this.id = id;
+    this.opponents = [];
+    this.outcomes = [];
   }
 
   Player.prototype.getRating = function() {
@@ -67,6 +71,9 @@
     this.__rating += q * b * tempSum;
 
     this.__rd = Math.max(MinRd, Math.sqrt(b));
+
+    this.opponents = [];
+    this.outcomes = [];
   };
 
 
@@ -110,8 +117,7 @@
   }
   
   Glicko.prototype.makePlayer = function (rating, rd) {
-    id = ++this.players_index;
-    var player = new Player(rating || this._default_rating, rd || this._default_rd);
+    var player = new Player(rating || this._default_rating, rd || this._default_rd, ++this.players_index);
     var playerProto = Object.getPrototypeOf(player);
     
     // Set this specific Player's `defaultRating`. This _has_ to be done
@@ -126,52 +132,50 @@
     // the rating manually.
     player.setRating(rating || this._default_rating);
     
-    player.id = id;
-    player.opponents = [];
-    player.outcomes = [];
     return player;
   };
   
-  Glicko.prototype.getActivePlayers = function () {
-    var self = this;
-    return Object.keys(this.activePlayers).map(function(key) { return self.activePlayers[key] });
-  };
-
-  Glicko.prototype.cleanPreviousMatches = function () {
-    this.getActivePlayers().forEach(function(player) {
-      player.opponents = [];
-      player.outcomes = [];
-      player.__oldR = player.__rating;
-      player.__oldRd = player.__rd;
-    });
-    this.activePlayers = {};
-  };
-
-  Glicko.prototype.calculatePlayersRatings = function(period) {
-    this._period = period || this._period + 1;
-    var self = this;
-    this.getActivePlayers().forEach(function(player) {
-      player.update_rank(self._c2, self._period);
-    });
-  };
-
+  Glicko.prototype.setPeriod = function (period, players) {
+    if (period != this._period || players)
+      this.calculatePlayersRatings();
+    this._period = period;
+    
+    if (players) {
+      for (var i = 0, len = players.length; i < len; i++)
+        players[i].setPeriod(this._c2, period);
+    }
+  }
+  
   /** 
     * Add a match result to be taken in account for the new rankings calculation
     * @param {Player} player1 The first player
     * @param {Player} player2 The second player
     * @param {number} outcome The outcome : 0 = defeat, 1 = victory, 0.5 = draw
     */
-  Glicko.prototype.addResult = function(player1, player2, outcome) {
+  Glicko.prototype.addResult = function (player1, player2, outcome) {
     player1.addResult(player2, outcome);
     player2.addResult(player1, 1 - outcome);
     this.activePlayers[player1.id] = player1;
     this.activePlayers[player2.id] = player2;
   };
-
-  Glicko.prototype.setPeriod = function(players, period) {
-    for (var i=0, len=players.length; i<len; i++)
-      players[i].setPeriod(this._c2, period);
-  }
+  
+  Glicko.prototype.getActivePlayers = function () {
+    var self = this;
+    return Object.keys(this.activePlayers).map(function (key) { return self.activePlayers[key] });
+  };
+  
+  Glicko.prototype.calculatePlayersRatings = function () {
+    var self = this;
+    var players = this.getActivePlayers();
+    players.forEach(function (player) {
+      player.update_rank(self._c2, self._period);
+    });
+    players.forEach(function (player) {
+      player.__oldR = player.__rating;
+      player.__oldRd = player.__rd;
+    });
+    this.activePlayers = {};
+  };
 
   exports.Glicko = Glicko;
 
