@@ -9,21 +9,37 @@
 // TODO: turn this into command line args
 var gametype = "ctf";
 var rateEachSingleMatch = true;
-var resetRating = true;
-var updateDatabase = false;
-var printResult = true;
 
-var _config;
+var mode = "full";
 
+if (mode == "full") {
+  var resetRating = true;
+  var updateDatabase = true;
+  var printResult = false;
+  var onlyProcessMatchesBefore = null;
+} else if (mode == "part1") {
+  // calculate data up to a certain date to test incremental updates
+  var resetRating = true;
+  var updateDatabase = true;
+  var printResult = true;
+  var onlyProcessMatchesBefore = new Date(Date.UTC(2015, 12 - 1, 1)); 
+} else if (mode == "part2") {
+  // incrementally calculate updates for unrated matches
+  var resetRating = false;
+  var updateDatabase = false;
+  var printResult = true;
+  var onlyProcessMatchesBefore = null;
+}
 
 // calculate a value for "c" so that an average RD value of 85 changes back to 350 when a player is inactive for 180 rating periods (=days)
 var g2 = new glicko.Glicko({ rating: 1500, rd: 350, c: Math.sqrt((Math.pow(350, 2) - Math.pow(82, 2)) / 180) });
 
-var playersBySteamId = {};
+var _config;
 var strategy;
+var playersBySteamId = {};
 
 // values for DB column games.g2_status
-var
+const
   ERR_NOTRATED = 0,
   ERR_OK = 1,
   ERR_ABORTED = 2,
@@ -40,19 +56,21 @@ function main() {
   strategy = createGameTypeStrategy(gametype);
 
   dbConnect()
-    .then(function (cli) {
+    .then(function(cli) {
       return resetRatingsInDb(cli)
-        .then(function () { return getMatchIds(cli); })
-        .then(function (matches) { return processMatches(cli, matches); })
-        .then(function (results) { return saveResults(cli, results)})
+        .then(function() { return loadPlayers(cli) })
+        .then(function() { return getMatchIds(cli); })
+        .then(function(matches) { return processMatches(cli, matches); })
+        .then(function(results) { return saveResults(cli, results) })
         .then(printResults)
-        .finally(function () { cli.release(); });
+        .finally(function() { cli.release(); });
     })
-    .catch(function (err) { console.log(err);
+    .catch(function(err) {
+      console.log(err);
       throw err;
     })
-    .finally(function () { pg.end(); })
-    .done(function () { console.log("-- finished --")});
+    .finally(function() { pg.end(); })
+    .done(function() { console.log("-- finished --") });
 }
 
 function createGameTypeStrategy(gametype) {
@@ -112,15 +130,41 @@ function resetRatingsInDb(cli) {
     return Q();
 
   return Q
-    .ninvoke(cli, "query", { name: "g2_reset1", text: "update player_elos set g2_games=0, g2_r=1500, g2_rd=300, g2_vol=0.06 where game_type_cd=$1", values: [gametype] })
-    .then(function () { return Q.ninvoke(cli, "query", { name: "g2_reset2", text: "update player_game_stats pgs set g2_score=null, g2_delta_r=null, g2_delta_rd=null from games g where pgs.game_id=g.game_id and g.game_type_cd=$1", values: [gametype] }) })
-    .then(function() { return Q.ninvoke(cli, "query", "update games set g2_status=0") });
+    .ninvoke(cli, "query", "update player_elos set g2_games=0, g2_r=0, g2_rd=0, g2_dt=null where game_type_cd=$1", [gametype])
+    .then(function () { return Q.ninvoke(cli, "query", "update player_game_stats pgs set g2_score=null, g2_delta_r=null, g2_delta_rd=null from games g where pgs.game_id=g.game_id and g.game_type_cd=$1", [gametype]) })
+    .then(function() { return Q.ninvoke(cli, "query", "update games set g2_status=0 where game_type_cd=$1", [gametype]) });
+}
+
+function loadPlayers(cli) {
+  if (resetRating)
+    return Q();
+
+  return Q.ninvoke(cli, "query",
+      "select h.hashkey, p.player_id, p.nick, pe.g2_r, pe.g2_rd, pe.g2_dt, pe.g2_games "
+      + " from hashkeys h"
+      + " inner join players p on p.player_id=h.player_id"
+      + " inner join player_elos pe on pe.player_id=h.player_id"
+      + " where pe.game_type_cd=$1"
+      + " and pe.g2_dt is not null", [gametype])
+    .then(function(result) {
+      console.log("loaded " + result.rows.length + " players");
+      result.rows.forEach(function(row) {
+        var player = getOrAddPlayer(row.hashkey, row.nick, row.g2_r, row.g2_rd, glickoPeriod(row.g2_dt));
+        player.games = row.g2_games;
+      });
+    });
 }
 
 function getMatchIds(cli) {
-  return Q.ninvoke(cli, "query", "select match_id, start_dt, game_id from games where game_type_cd='" + gametype + "' and mod in ('" + strategy.validFactories.join("','") + "') order by start_dt")
-    .then(function (result) {
-      return result.rows.map(function(row) { return { game_id: row["game_id"], date: row["start_dt"], match_id: row["match_id"] }; });
+  var cond = resetRating ? "" : " and g2_status=0";
+  cond += " and (" + (onlyProcessMatchesBefore ? 1 : 0) + "=0 or start_dt<$1)";
+  
+  return Q.ninvoke(cli, "query", 
+      "select match_id, start_dt, game_id from games"
+      + " where game_type_cd='" + gametype + "' and mod in ('" + strategy.validFactories.join("','") + "')" + cond 
+      + " order by start_dt", [onlyProcessMatchesBefore || new Date()])
+    .then(function(result) {
+      return result.rows.map(function(row) { return { game_id: row.game_id, date: row.start_dt, match_id: row.match_id }; });
     });
 }
 
@@ -132,22 +176,18 @@ function processMatches(cli, matches) {
   console.log("found " + matches.length + " matches");
   var progressLogger = setInterval(function() { printProgress = true; }, 5000);
   return matches.reduce(function(chain, match) {
-    return chain.then(function () {
-      ++counter;
+      return chain.then(function() {
         if (printProgress) {
           console.log("processed matches: " + counter + " (" + Math.round(counter * 10000 / matches.length) / 100 + "%)");
           printProgress = false;
         }
+        ++counter;
         g2.setPeriod(glickoPeriod(match.date));
         return /* ok || */ processMatch(cli, match.match_id, match.date, match.game_id, currentRatingPeriod);
       });
     }, Q())
-    .then(function() {
-      var allRatings = Object.keys(playersBySteamId).map(function(key) { return playersBySteamId[key].rating; });
-      g2.setPeriod(glickoPeriod(new Date()), allRatings);
-    })
-    .then(function () { return playersBySteamId; })
-  .finally(function () { clearTimeout(progressLogger)});
+    .then(function() { return playersBySteamId; })
+    .finally(function() { clearTimeout(progressLogger) });
 }
 
 function processMatch(cli, matchId, date, gameId, ratingPeriod) {
@@ -296,23 +336,22 @@ function extractDataFromJson(path) {
       return players;
 
       function aggregateTimeAndScorePerPlayer() {
-        raw.playerStats.forEach(function (p) {
+        raw.playerStats.forEach(function(p) {
           botmatch |= p.STEAM_ID == "0";
           if (p.WARMUP || botmatch) // p.ABORTED must be counted for team switchers
             return;
 
           var pd = playerData[p.STEAM_ID];
           if (!pd) {
-            pd = { id: p.STEAM_ID, name: p.NAME, timeRed: 0, timeBlue: 0, score: 0, k:0, d:0, dg: 0, dt: 0, win: false };
+            pd = { id: p.STEAM_ID, name: p.NAME, timeRed: 0, timeBlue: 0, score: 0, k: 0, d: 0, dg: 0, dt: 0, win: false };
             playerData[p.STEAM_ID] = pd;
           }
 
-          var time = Math.min(p.PLAY_TIME, raw.matchStats.GAME_LENGTH);  // pauses and whatever QL bugs can cause excessive PLAY_TIME
+          var time = Math.min(p.PLAY_TIME, raw.matchStats.GAME_LENGTH); // pauses and whatever QL bugs can cause excessive PLAY_TIME
           if (p.TEAM == 2) {
             timeBlue += time;
             pd.timeBlue += time;
-          }
-          else {
+          } else {
             timeRed += time;
             pd.timeRed += time;
           }
@@ -337,8 +376,7 @@ function extractDataFromJson(path) {
           if (pd.dg < 500 || pd.dt / pd.dg >= 10.0) // skip AFK players
             continue;
 
-          if (!playersBySteamId[pd.id])
-            playersBySteamId[pd.id] = { id: pd.id, name: pd.name, games: 0, wins: 0, rating: g2.makePlayer() };
+          getOrAddPlayer(pd.id, pd.name).played = true;
 
           if (isTeamGame) {
             var winningTeam = raw.matchStats.TSCORE0 > raw.matchStats.TSCORE1 ? -1 : raw.matchStats.TSCORE0 == raw.matchStats.TSCORE1 ? 0 : +1;
@@ -352,6 +390,13 @@ function extractDataFromJson(path) {
         return players;
       }
     });
+}
+
+function getOrAddPlayer(steamId, name, rating, rd, period) {
+  var player = playersBySteamId[steamId];
+  if (!player)
+    playersBySteamId[steamId] = player = { id: steamId, name: name, games: 0, wins: 0, rating: g2.makePlayer(rating, rd, period) };
+  return player;
 }
 
 function calcPlayerPerformance(p, raw) {
@@ -377,7 +422,14 @@ function calcPlayerPerformance(p, raw) {
 }
 
 function glickoPeriod(date) {
+  if (!date) return 0;
+  if (typeof (date) == "number") return date;
   return Math.floor(date.getTime() / 1000 / 60 / 60 / 24);
+}
+
+function glickoDate(period) {
+  //return period ? new Date(period * 24 * 60 * 60 * 1000) : null;
+  return period;
 }
 
 function saveResults(cli, players) {
@@ -394,12 +446,12 @@ function saveResults(cli, players) {
 
   return list.reduce(function(chain, player) {
     return chain.then(function () {
-      var val = [player.pid, gametype, player.games, player.rating.getRating(), player.rating.getRd(), 0];
+      var val = [player.pid, gametype, player.games, player.rating.getRating(), player.rating.getRd(), glickoDate(player.rating.getPeriod())];
       // try update and if rowcount is 0, execute an insert
-      return Q.ninvoke(cli, "query", { name: "elo_upd", text: "update player_elos set g2_games=$3, g2_r=$4, g2_rd=$5, g2_vol=$6 where player_id=$1 and game_type_cd=$2", values: val })
+      return Q.ninvoke(cli, "query", { name: "elo_upd", text: "update player_elos set g2_games=$3, g2_r=$4, g2_rd=$5, g2_dt=$6 where player_id=$1 and game_type_cd=$2", values: val })
         .then(function(result) {
           if (result.rowCount == 1) return Q();
-          return Q.ninvoke(cli, "query", { name: "elo_ins", text: "insert into player_elos (player_id, game_type_cd, g2_games, g2_r, g2_rd, g2_vol, elo) values ($1,$2,$3,$4,$5,$6, 100)", values: val });
+          return Q.ninvoke(cli, "query", { name: "elo_ins", text: "insert into player_elos (player_id, game_type_cd, g2_games, g2_r, g2_rd, g2_dt, elo) values ($1,$2,$3,$4,$5,$6, 100)", values: val });
         });
     });
   }, Q())
@@ -423,13 +475,16 @@ function getPlayerId(cli, player) {
 function printResults() {
   if (!printResult)
     return playersBySteamId;
+  
+  // bring all RD values to today's date  
+  var allRatings = Object.keys(playersBySteamId).map(function (key) { return playersBySteamId[key].rating; });
+  //g2.setPeriod(glickoPeriod(new Date()), allRatings);
 
-  var period = glickoPeriod(new Date());
-  g2.setPeriod(period);
   var players = [];
   for (var key in playersBySteamId) {
     if (!playersBySteamId.hasOwnProperty(key)) continue;
     var p = playersBySteamId[key];
+    if (!p.played) continue;
     p.r1 = p.rating.getRating() - p.rating.getRd();
     players.push(p);
   }

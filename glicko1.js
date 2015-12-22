@@ -6,15 +6,11 @@
   var mathPow = Math.pow;
   Math.pow = function (b, e) { return e == 2 ? b * b : mathPow(b, e); }
 
-  function Player(rating, rd, id) {
-    this.__period = 0;
-
+  function Player(id, rating, rd, period) {
+    this.id = id;
+    this.setPeriod(period);
     this.setRating(rating);
     this.setRd(rd);
-    this.__oldR = rating;
-    this.__oldRd = rd;
-
-    this.id = id;
     this.opponents = [];
     this.outcomes = [];
   }
@@ -25,6 +21,7 @@
 
   Player.prototype.setRating = function(rating) {
     this.__rating = rating;
+    this.__oldR = rating;
   };
 
   Player.prototype.getRd = function() {
@@ -33,27 +30,33 @@
 
   Player.prototype.setRd = function(rd) {
     this.__rd = rd;
+    this.__oldRd = rd;
   };
+  
+  Player.prototype.getPeriod = function() {
+    return this.__period;
+  }
 
-  Player.prototype.addResult = function(opponent, outcome) {
+  Player.prototype.setPeriod = function (period, c2) {
+    if (period == this.__period) return;
+    if (c2 && this.__period)
+      this.setRd(Math.max(MinRd, Math.min(Math.sqrt(Math.pow(this.__rd, 2) + c2 * (period - this.__period)), this.defaultRd)));
+    this.__period = period;
+  }
+  
+  Player.prototype.addResult = function (opponent, outcome) {
     this.opponents.push(opponent);
     this.outcomes.push(outcome);
   };
 
-  Player.prototype.setPeriod = function(c2, period) {
-    if (c2 && this.__period)
-      this.__rd = Math.max(MinRd, Math.min(Math.sqrt(Math.pow(this.__rd, 2) + c2 * (period - this.__period)), this.defaultRd));
-    this.__period = period;
-  }
-
   // Calculates the new rating and rating deviation of the player.
   // Follows the steps of the algorithm described at http://www.glicko.net/glicko/glicko.pdf
-  Player.prototype.update_rank = function(c2, period) {
+  Player.prototype.update_rank = function(period, c2) {
 
     //Step 1a : done by Player initialization
 
     //Step 1b: increase rating deviation for the time a player didn't play
-    this.setPeriod(c2, period);
+    this.setPeriod(period, c2);
 
     //Step 2
 
@@ -116,8 +119,8 @@
     this.activePlayers = {};
   }
   
-  Glicko.prototype.makePlayer = function (rating, rd) {
-    var player = new Player(rating || this._default_rating, rd || this._default_rd, ++this.players_index);
+  Glicko.prototype.makePlayer = function (rating, rd, period) {
+    var player = new Player(++this.players_index, rating || this._default_rating, rd || this._default_rd, period || this._period);
     var playerProto = Object.getPrototypeOf(player);
     
     // Set this specific Player's `defaultRating`. This _has_ to be done
@@ -126,12 +129,7 @@
     // `Glicko` instances.
     playerProto.defaultRating = this._default_rating;
     playerProto.defaultRd = this._default_rd;
-    
-    // Since this `Player`'s rating was calculated upon instantiation,
-    // before the `defaultRating` was defined above, we much re-calculate
-    // the rating manually.
-    player.setRating(rating || this._default_rating);
-    
+        
     return player;
   };
   
@@ -168,7 +166,7 @@
     var self = this;
     var players = this.getActivePlayers();
     players.forEach(function (player) {
-      player.update_rank(self._c2, self._period);
+      player.update_rank(self._period, self._c2);
     });
     players.forEach(function (player) {
       player.__oldR = player.__rating;
