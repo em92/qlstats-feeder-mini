@@ -7,10 +7,10 @@
 
 
 // TODO: turn this into command line args
-var gametype = "ctf";
+var gametype = "ffa";
 var rateEachSingleMatch = true;
 
-var mode = "full";
+var mode = "incremental";
 
 if (mode == "full") {
   var resetRating = true;
@@ -29,7 +29,14 @@ if (mode == "full") {
   var updateDatabase = false;
   var printResult = true;
   var onlyProcessMatchesBefore = null;
+} else if (mode == "incremental") {
+  // incrementally calculate updates for unrated matches
+  var resetRating = false;
+  var updateDatabase = true;
+  var printResult = false;
+  var onlyProcessMatchesBefore = null;
 }
+
 
 // calculate a value for "c" so that an average RD value of 85 changes back to 350 when a player is inactive for 180 rating periods (=days)
 var g2 = new glicko.Glicko({ rating: 1500, rd: 350, c: Math.sqrt((Math.pow(350, 2) - Math.pow(82, 2)) / 180) });
@@ -147,13 +154,12 @@ function loadPlayers(cli) {
       "select h.hashkey, p.player_id, p.nick, pe.g2_r, pe.g2_rd, pe.g2_dt, pe.g2_games "
       + " from hashkeys h"
       + " inner join players p on p.player_id=h.player_id"
-      + " inner join player_elos pe on pe.player_id=h.player_id"
-      + " where pe.game_type_cd=$1"
-      + " and pe.g2_dt is not null", [gametype])
+      + " left outer join player_elos pe on pe.player_id=h.player_id"
+      + " where pe.game_type_cd=$1", [gametype])
     .then(function(result) {
       console.log("loaded " + result.rows.length + " players");
       result.rows.forEach(function(row) {
-        var player = getOrAddPlayer(row.hashkey, row.nick, row.g2_r, row.g2_rd, glickoPeriod(row.g2_dt));
+        var player = getOrAddPlayer(row.player_id, row.hashkey, row.nick, row.g2_r, row.g2_rd, glickoPeriod(row.g2_dt));
         player.games = row.g2_games;
       });
     });
@@ -380,7 +386,7 @@ function extractDataFromJson(path) {
           if (pd.dg < 500 || pd.dt / pd.dg >= 10.0) // skip AFK players
             continue;
 
-          getOrAddPlayer(pd.id, pd.name).played = true;
+          getOrAddPlayer(null, pd.id, pd.name).played = true;
 
           if (isTeamGame) {
             var winningTeam = raw.matchStats.TSCORE0 > raw.matchStats.TSCORE1 ? -1 : raw.matchStats.TSCORE0 == raw.matchStats.TSCORE1 ? 0 : +1;
@@ -396,10 +402,10 @@ function extractDataFromJson(path) {
     });
 }
 
-function getOrAddPlayer(steamId, name, rating, rd, period) {
+function getOrAddPlayer(playerId, steamId, name, rating, rd, period) {
   var player = playersBySteamId[steamId];
   if (!player)
-    playersBySteamId[steamId] = player = { id: steamId, name: name, games: 0, wins: 0, rating: g2.makePlayer(rating, rd, period) };
+    playersBySteamId[steamId] = player = { pid: playerId, id: steamId, name: name, games: 0, wins: 0, rating: g2.makePlayer(rating, rd, period) };
   return player;
 }
 
@@ -449,17 +455,18 @@ function saveResults(cli, players) {
   }
 
   return list.reduce(function(chain, player) {
-    return chain.then(function () {
-      var val = [player.pid, gametype, player.games, player.rating.getRating(), player.rating.getRd(), glickoDate(player.rating.getPeriod())];
-      // try update and if rowcount is 0, execute an insert
-      return Q.ninvoke(cli, "query", { name: "elo_upd", text: "update player_elos set g2_games=$3, g2_r=$4, g2_rd=$5, g2_dt=$6 where player_id=$1 and game_type_cd=$2", values: val })
-        .then(function(result) {
-          if (result.rowCount == 1) return Q();
-          return Q.ninvoke(cli, "query", { name: "elo_ins", text: "insert into player_elos (player_id, game_type_cd, g2_games, g2_r, g2_rd, g2_dt, elo) values ($1,$2,$3,$4,$5,$6, 100)", values: val });
-        });
-    });
-  }, Q())
-  .then(Q(players));
+      return chain.then(function() {
+        var val = [player.pid, gametype, player.games, player.rating.getRating(), player.rating.getRd(), glickoDate(player.rating.getPeriod())];
+        // try update and if rowcount is 0, execute an insert
+        return Q.ninvoke(cli, "query", { name: "elo_upd", text: "update player_elos set g2_games=$3, g2_r=$4, g2_rd=$5, g2_dt=$6 where player_id=$1 and game_type_cd=$2", values: val })
+          .then(function(result) {
+            if (result.rowCount == 1) return Q();
+            return Q.ninvoke(cli, "query", { name: "elo_ins", text: "insert into player_elos (player_id, game_type_cd, g2_games, g2_r, g2_rd, g2_dt, elo) values ($1,$2,$3,$4,$5,$6, 100)", values: val })
+              .catch(function(err) { console.log("Failed to insert/update player_elo: steam-id=" + player.id + ", data=" + JSON.stringify(val) + ", name=" + player.name + ":\n" + err); });
+          });
+      });
+    }, Q())
+    .then(Q(players));
 }
 
 function getPlayerId(cli, player) {
