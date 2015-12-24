@@ -1,6 +1,6 @@
 {
   "feeder": {
-    "enabled":  true,
+    "enabled": true,
     "saveDownloadedJson": true,
     "importDownloadedJson": true,
     "xonstatSubmissionUrl": "http://localhost:8080/stats/submit",

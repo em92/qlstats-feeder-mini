@@ -1,53 +1,60 @@
 ﻿/*
- Fetch Quake Live statistics from game server ZeroMQ message queues.
  
- Optionally save the stats to .json.gz files.
- Optionally reformat the JSON to XonStat match report format and send it to sumbission.py via HTTP POST.
- Optionally submit saved .json.gz matches to XonStats (files specified as command line arguments)
-
+ This is a multi-purpose script which can
+ - fetch live game and player statistics from Quake Live game server ZeroMQ message queues
+ - save the stats to .json.gz files
+ - load saved .json.gz stats files for reprocessing
+ - transform the stats JSON to XonStat match report format and HTTP POST it to sumbission.py, which will insert it in the database
+ - run an HTTP server with an administration panel to add/modify the game server list
+ - run an HTTP server with API URLs to query and deliver saved .json.gz files
+ 
  The script monitors changes to the config file and automatically connects to added servers and disconnects from removed servers.
 
  Reconnecting after network errors is handled internally by ZeroMQ.
- When QL fails and becomes silent, this code will reconnect after an idle timeout.
-
- When XonStat's submission.py server is not responding with an "ok", a .json.gz is saved in the <jsondir>/errors/ folder.
-
- The "zmq" node module uses "libzmq", which has a hardcoded limit of 1024 sockets. 3 sockets per ZMQ connection => max 341 ZMQ conns.
+ QL servers seem to stop sending ZMQ messages when they are idle for a while, therefore this script reconnects to periodically to idle servers.
+ 
+ The "zmq" node module uses "libzmq", which has a hardcoded limit of 1024 sockets. 3 sockets per ZMQ connection => max 341 ZMQ connections.
  You can either recompile libzmq + node.zmq, or run multiple instances of the feeder and provide different config files with "-c cfg1.json".
 
+ When XonStat's submission.py server is not responding with an "ok", a .json.gz is saved in the "errors" folder.
+ 
  Command line: feeder [options] [files/dirs...]:
- -c <configfile>:  use the provided config file
- -e:               reprocess .json.gz files from "errors" folder
+ -c <configfile>:  use the provided config file. If omitted, "cfg.json" is used
+ -e:               reprocess .json.gz files from the "errors" folder
  -x:               delete broken .json.gz files
  files/dirs:       list of files and directories to be processed recursively
+  
+ When no command line options and files are specified, the feeder connects to the configured QL game servers to load live statistics.
+ Servers in the config file are specified as "ownername:ip:port/zmqpassword"
 */
 
 "use strict";
 
-var
+const
   fs = require("graceful-fs"),
   request = require("request"),
   log4js = require("log4js"),
   zlib = require("zlib"),
   Q = require("q"),
   express = require("express"),
-  http = require("http");
-
-var
+  http = require("http"),
   StatsConnection = require("./statsconn");
 
-
-var IpPortPassRegex = /^(?:([^:]*):)?((?:[0-9]{1,3}\.){3}[0-9]{1,3}):([0-9]+)(?:\/(.*))?$/; // IP:port/pass
+const IpPortPassRegex = /^(?:([^:]*):)?((?:[0-9]{1,3}\.){3}[0-9]{1,3}):([0-9]+)(?:\/(.*))?$/; // IP:port/pass
 
 var __dirname; // current working directory (defined by node.js)
+
 var _logger; // log4js logger
 var _configFileName = "cfg.json";
-var _config; // config data
-var _statsConnections = {}; // dictionary with IP:port => StatsConnection
-var _ignoreConfigChange = false; //
+var _config; // config data object
+var _ignoreConfigChange = false;
 var _reloadErrorFiles = false;
 var _deleteBrokenFiles = false;
 
+/**
+ * @type Object.<string,StatsConnection> using IP:port as key
+ */
+var _statsConnections = {}; // dictionary with IP:port => StatsConnection
 
 function main() {
   _logger = log4js.getLogger("feeder");
@@ -74,7 +81,7 @@ function main() {
 
 /**
  * Parses the command line args, set global variables based on selected switches
- * @returns {Array<string>} List of files and/or directories to (re)process
+ * @returns {string[]} List of files and/or directories to (re)process
  */
 function parseCommandLine() {
   var args = process.argv.slice(2);
@@ -111,7 +118,7 @@ function loadInitialConfig() {
 
 /**
  * Try to (re-)load the configuration JSON file and store the object in _config
- * @returns {Boolean} true if the config was (re)loaded
+ * @returns {boolean} true if the config was (re)loaded
  */
 function reloadConfig() {
   try {
@@ -142,7 +149,7 @@ function reloadConfig() {
 
 /**
  * Upgrade older config data to current format
- * @returns {Boolean} true if there were changes to the configuration
+ * @returns {boolean} true if there were changes to the configuration
  */
 function upgradeConfigVersion() {
   var oldConfig = JSON.stringify(_config);
@@ -175,7 +182,7 @@ function upgradeConfigVersion() {
 
 /**
  * Load saved .json[.gz] files for reprosessing
- * @param {Array[string]} args - list of files to be processed (ignored if _reloadErrorFiles is true)
+ * @param {string[]} files - list of files/dirs to be processed recursively
  */
 function processFilesFromCommandLine(files) {
   processJsonFiles(files)
@@ -252,8 +259,8 @@ function writeConfig() {
 
 /**
  * Recursively load and process all provided .json[.gz] files and folders
- * @param {Array[string]} files - files and folders
- * @returns {Q promise[Boolean]} A promise that will be fulfilled when all files are processed. True when there were no errors.
+ * @param {string[]} files - files and folders
+ * @returns {Promise<boolean>} A promise that will be fulfilled when all files are processed. True when there were no errors.
  */
 function processJsonFiles(files) {
   // serialize calls for each file
@@ -306,8 +313,8 @@ function processJsonFiles(files) {
 
 /**
  * Synchronizes the currently active ZeroMQ connections in _statsConnections with the provided server list.
- * @param {Array[string]} servers - List of servers with the format owner:ip:port/password
- * @returns {Boolean} True if the server list was updated
+ * @param {string[]} servers - List of servers with the format owner:ip:port/password
+ * @returns {boolean} True if the server list was updated
  */
 function connectToServerList(servers) {
   if (!servers.length) {
@@ -388,11 +395,11 @@ function connectToServerList(servers) {
 
 /**
  * Used internally and by the HTTP admin panel to add a server and create a ZeroMQ connection
- * @param {String} owner 
- * @param {String} ip 
- * @param {Number} port 
- * @param {String} pass 
- * @returns {Object StatsConnection|null} The new connection object or null if there is already another connection for this server
+ * @param {string} owner 
+ * @param {string} ip 
+ * @param {number} port 
+ * @param {string} pass 
+ * @returns {?StatsConnection} The new connection object or null if there is already another connection for this server
  */
 function addServer(owner, ip, port, pass) {
   var addr = ip + ":" + port;
@@ -409,7 +416,7 @@ function addServer(owner, ip, port, pass) {
 
 /**
  * Used internally and by the HTTP admin panel to remove a server and shut down the ZeroMQ connection
- * @param {Object StatsConnection} conn - The StatsConnection object of the server to be removed
+ * @param {StatsConnection} conn - The StatsConnection object of the server to be removed
  */
 function removeServer(conn) {
   conn.disconnect();
@@ -457,8 +464,8 @@ function onZmqMessageCallback(conn, data) {
 /**
  * Saves the game data object to a .json.gz file. Errors are logged and handled internally 
  * @param {Object} game 
- * @param {Boolean} toErrorDir - If true, the file is saved in the "errors" folder, otherwise in a YYYY-MM/DD/ folder
- * @returns {Promise[undefined]} A promise which gets fulfilled when the operation has completed
+ * @param {boolean} toErrorDir - If true, the file is saved in the "errors" folder, otherwise in a YYYY-MM/DD/ folder
+ * @returns {Promise<>} A promise which gets fulfilled when the operation has completed
  */
 function saveGameJson(game, toErrorDir) {
   var basedir = _config.feeder.jsondir;
@@ -489,7 +496,7 @@ function saveGameJson(game, toErrorDir) {
 /**
  * (re-)process game data: validate game data, transform JSON to xonstat match report text format and post it to submission.py
  * @param {Object} game - game data from onZmqMessageCallback or from a loaded .json[.gz] file
- * @returns {Boolean|Promise<Boolean>} 
+ * @returns {boolean|Promise<Boolean>} 
  *   false when the game doesn't qualify to be uploaded to xonstat, 
  *   Promise<Boolean>==true when the match was successfully uploaded, 
  *   Promise with exception when there was an error in the upload or server side processing.
@@ -537,7 +544,7 @@ function processGameData(game) {
  * Convert the internal game data to the XonStat match report text file format used as HTTP POST body for submission.py
  * @param {string} gt - game type (ffa, ca, duel, ctf, tdm, ft, ...)
  * @param {Object} game - game data object from onZmqMessageCallback or from a .json.gz
- * @returns {String} - match report text
+ * @returns {string} - match report text
  */
 function createXonstatMatchReport(gt, game) {
   var report = [];
