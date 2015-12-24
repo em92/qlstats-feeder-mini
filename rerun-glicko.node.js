@@ -99,7 +99,7 @@ function createGameTypeStrategy(gametype) {
     "ft": 8
   }
   var ValidateMatchForGametype = {
-    "duel": function (json) { return json.matchStats.GAME_LENGTH >= 10 * 60 },
+    "duel": function (json) { return json.matchStats.GAME_LENGTH >= 10 * 60 - 5 || json.matchStats.EXIT_MSG.indexOf("forfeited") >= 0 },  
     "ffa": function (json) { return json.matchStats.FRAG_LIMIT >= 50 },
     "ca": function (json) { return Math.max(json.matchStats.TSCORE0, json.matchStats.TSCORE1) >= 10 /* old JSONS have no ROUND_LIMIT */ },
     "tdm": function (json) { return Math.max(json.matchStats.TSCORE0, json.matchStats.TSCORE1) >= 100 || json.matchStats.GAME_LENGTH >= 15 * 10 },
