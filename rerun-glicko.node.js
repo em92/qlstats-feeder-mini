@@ -3,6 +3,7 @@
   pg = require("pg"),
   zlib = require("zlib"),
   glicko = require("./glicko1"),
+  log4js = require("log4js"),
   Q = require("q");
 
 
@@ -47,7 +48,7 @@ var playersBySteamId = {};
 
 // values for DB column games.g2_status
 const
-  ERR_NOTRATED = 0,
+  ERR_NOTRATEDYET = 0,
   ERR_OK = 1,
   ERR_ABORTED = 2,
   ERR_ROUND_OR_TIMELIMIT = 3,
@@ -143,7 +144,7 @@ function resetRatingsInDb(cli) {
   return Q
     .ninvoke(cli, "query", "update player_elos set g2_games=0, g2_r=0, g2_rd=0, g2_dt=null where game_type_cd=$1", [gametype])
     .then(function () { return Q.ninvoke(cli, "query", "update player_game_stats pgs set g2_score=null, g2_delta_r=null, g2_delta_rd=null from games g where pgs.game_id=g.game_id and g.game_type_cd=$1", [gametype]) })
-    .then(function() { return Q.ninvoke(cli, "query", "update games set g2_status=0 where game_type_cd=$1", [gametype]) });
+    .then(function() { return Q.ninvoke(cli, "query", "update games set g2_status=$2 where game_type_cd=$1", [gametype, ERR_NOTRATEDYET]) });
 }
 
 function loadPlayers(cli) {
