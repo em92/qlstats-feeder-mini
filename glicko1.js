@@ -166,11 +166,11 @@
     var self = this;
     var players = this.getActivePlayers();
     players.forEach(function (player) {
-      player.update_rank(self._period, self._c2);
-    });
-    players.forEach(function (player) {
       player.__oldR = player.__rating;
       player.__oldRd = player.__rd;
+    });
+    players.forEach(function (player) {
+      player.update_rank(self._period, self._c2);
     });
     this.activePlayers = {};
   };

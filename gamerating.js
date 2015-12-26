@@ -50,7 +50,7 @@ function rateAllGames(gt, options) {
         .then(function() { return loadPlayers(cli); })
         .then(function() { return getMatchIds(cli); })
         .then(function(matches) { return reprocessMatches(cli, matches); })
-        .then(function(results) { return saveResults(cli, results) })
+        .then(function() { return savePlayerRatings(cli) })
         .then(function () { return playersBySteamId; })
         .finally(function() { cli.release(); });
     })
@@ -78,7 +78,7 @@ function rateSingleGame(gameId, game) {
       return Q()
         .then(function() { return loadPlayers(cli, steamIds); })
         .then(function() { return processGame(cli, gameId, game); })
-        .then(function (results) { return saveResults(cli, results); })
+        .then(function () { return savePlayerRatings(cli); })
         .then(function (results) { return printResults(results); })
         .then(Q(true))
         .finally(function() { cli.release(); });
@@ -489,7 +489,8 @@ function setGameStatus(cli, gameId, status) {
   return Q.ninvoke(cli, "query", { name: "game_upd", text: "update games set g2_status=$2 where game_id=$1", values: [gameId, status] });
 }
 
-function saveResults(cli, players) {
+function savePlayerRatings(cli) {
+  var players = playersBySteamId;
   if (!updateDatabase)
     return Q(players);
 
@@ -497,7 +498,7 @@ function saveResults(cli, players) {
   for (var steamId in players) {
     if (!players.hasOwnProperty(steamId)) continue;
     var player = players[steamId];
-    if (player && player.games && player.mustSave)
+    if (player.mustSave)
       list.push(player);
   }
 
