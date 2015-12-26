@@ -60,11 +60,11 @@ function main() {
   _logger = log4js.getLogger("feeder");
   Q.longStackSupport = false; // enable if you have to trace a problem, but it has a HUGE performance penalty
   StatsConnection.setLogger(_logger);
-
+  
   var filesToProcess = parseCommandLine();
 
   loadInitialConfig();
-
+  
   if (_reloadErrorFiles)
     return processFilesFromCommandLine([__dirname + "/" + _config.feeder.jsondir + "errors"]);
   
@@ -429,7 +429,7 @@ function removeServer(conn) {
 function onZmqMessageCallback(conn, data) {
   var msg = data.toString();
   var obj = JSON.parse(msg);
-  _logger.trace(conn.addr + ": received ZMQ message: " + obj.TYPE);
+  _logger.trace(conn.addr + ": received ZMQ message: " + msg);
   if (obj.TYPE == "MATCH_STARTED") {
     _logger.debug(conn.addr + ": match started");
     conn.matchStarted = true;
@@ -531,12 +531,18 @@ function processGameData(game) {
 
   var report = createXonstatMatchReport(gt, game);
   return postMatchReportToXonstat(addr, game, report)
-    .then(function(success) {
-      if (!success && !_reloadErrorFiles)
+    .then(function (result) {
+      if (!result.ok || !result.game_id) {
+        _logger.debug("game could not be rated: " + game.matchStats.MATCH_GUID);
+        return Q(false);
+      }
+      var rating = require("./gamerating");
+      return rating.rateSingleGame(result.game_id, game);
+    })
+    .catch(function(err) {
+      if (!_reloadErrorFiles)
         saveGameJson(game, true);
-      if (success)
-        return true;
-      throw new Error("failed to upload " + game.gameStats.MATCH_GUID);
+      throw err;
     });
 }
 
@@ -651,7 +657,7 @@ function createXonstatMatchReport(gt, game) {
  * @param {string} addr - Server address as ip:port
  * @param {Object} game - Game data which in case of an error will be saved as .json.gz in the "errors" folder for later reprocessing
  * @param {string} report - The xonstat match report
- * @returns {Promise<Boolean>} - true when the data was successfully posted an processed by submission.py
+ * @returns {Promise<Object>} - JSON object returned by submission.py
  */
 function postMatchReportToXonstat(addr, game, report) {
   var defer = Q.defer();
@@ -662,14 +668,14 @@ function postMatchReportToXonstat(addr, game, report) {
       headers: { "X-D0-Blind-Id-Detached-Signature": "dummy" },
       body: report
     },
-    function(err, response) {
+    function(err, response, body) {
       if (err)
         defer.reject(new Error("upload failed: " + game.matchStats.MATCH_GUID + ": " + err));
       else if (response.statusCode != 200)
         defer.reject(new Error("upload failed: " + game.matchStats.MATCH_GUID + ": HTTP " + response.statusCode + " - " + response.statusMessage + "): "));
       else {
         _logger.info("match uploaded successfully: " + game.matchStats.MATCH_GUID);
-        defer.resolve(true);
+        defer.resolve(JSON.parse(body));
       }
     });
   return defer.promise;

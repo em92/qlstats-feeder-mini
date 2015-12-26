@@ -39,7 +39,7 @@
 
   Player.prototype.setPeriod = function (period, c2) {
     if (period == this.__period) return;
-    if (c2 && this.__period)
+    if (c2 && this.__period && period > this.__period)
       this.setRd(Math.max(MinRd, Math.min(Math.sqrt(Math.pow(this.__rd, 2) + c2 * (period - this.__period)), this.defaultRd)));
     this.__period = period;
   }

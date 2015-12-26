@@ -6,7 +6,7 @@
     <ProjectGuid>{e8a8d291-9163-4cde-9ac1-b01e406db719}</ProjectGuid>
     <ProjectHome />
     <ProjectView>ShowAllFiles</ProjectView>
-    <StartupFile>rerun-glicko.node.js</StartupFile>
+    <StartupFile>feeder.node.js</StartupFile>
     <WorkingDirectory>.</WorkingDirectory>
     <OutputPath>.</OutputPath>
     <ProjectTypeGuids>{3AF33F2E-1136-4D97-BBB7-1795711AC8B8};{349c5851-65df-11da-9384-00065b846f21};{9092AA53-FB77-4645-B42D-1CCCA6BD08BD}</ProjectTypeGuids>
@@ -29,6 +29,7 @@
     <Compile Include="backfill-factory.node.js" />
     <Compile Include="feeder.node.js" />
     <Compile Include="glicko1.js" />
+    <Compile Include="gamerating.js" />
     <Compile Include="rerun-glicko.node.js" />
     <Compile Include="rerun-jsons.node.js" />
     <Compile Include="rerun-ts.node.js" />
@@ -39,6 +40,9 @@
     <Content Include="sample-data\matchreport.json" />
     <Content Include="sample-data\playerstats1.json" />
     <Content Include="sample-data\playerstats2.json" />
+    <Content Include="sample-data\player_death.json" />
+    <Content Include="sample-data\player_kill.json" />
+    <Content Include="sample-data\player_switchteam.json" />
     <TypeScriptCompile Include="typings\express\express.d.ts" />
     <TypeScriptCompile Include="typings\graceful-fs\graceful-fs.d.ts" />
     <TypeScriptCompile Include="typings\log4js\log4js.d.ts" />

@@ -106,7 +106,7 @@ function getDateFolder(date, deltaDays) {
 var playersBySteamId = {};
 
 function processFile(cli, gameId, file) {
-  return extractDataFromJson(file)
+  return extractDataFromJsonFile(file)
     .then(function (playerRanking) {
       if (!playerRanking || playerRanking.length == 0)
         return false;
@@ -147,7 +147,7 @@ function processFile(cli, gameId, file) {
 }
 
 
-function extractDataFromJson(path) {
+function extractDataFromJsonFile(path) {
   return Q
     .nfcall(fs.readFile, path)
     .then(function(data) { return Q.nfcall(zlib.gunzip, data); })

@@ -5,10 +5,9 @@
     "importDownloadedJson": true,
     "xonstatSubmissionUrl": "http://localhost:8080/stats/submit",
     "jsondir": "./ql-match-jsons/",
-    "logLevel": "DEBUG",
+    "logLevel": "TRACE",
     "servers": [
-      "yourname:192.168.0.1:27960/yourpass",
-      "yourname:192.168.0.1:27961/yourpass"
+      "yourname:127.0.0.1:27960/statspass"
     ]
   },
   "httpd": {

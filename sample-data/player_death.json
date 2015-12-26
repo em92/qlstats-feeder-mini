@@ -1,0 +1,44 @@
+﻿{
+  "DATA": {
+    "KILLER": null,
+    "MATCH_GUID": "7567b53d-589e-4cfe-a9d5-1b9a7fdf1c00",
+    "MOD": "HURT",
+    "OTHER_TEAM_ALIVE": null,
+    "OTHER_TEAM_DEAD": null,
+    "ROUND": null,
+    "SUICIDE": false,
+    "TEAMKILL": false,
+    "TEAM_ALIVE": null,
+    "TEAM_DEAD": null,
+    "TIME": 110,
+    "VICTIM": {
+      "AIRBORNE": true,
+      "AMMO": 25,
+      "ARMOR": 0,
+      "BOT": false,
+      "BOT_SKILL": null,
+      "HEALTH": 100,
+      "HOLDABLE": null,
+      "NAME": "^7Predat^1H0^7r",
+      "POSITION": {
+        "X": -467.0299682617188,
+        "Y": 593.5997924804688,
+        "Z": -1709.650634765625
+      },
+      "POWERUPS": null,
+      "SPEED": 33.67529678344727,
+      "STEAM_ID": "76561198137367816",
+      "STREAK": 0,
+      "SUBMERGED": false,
+      "TEAM": 0,
+      "VIEW": {
+        "X": 4.5977783203125,
+        "Y": -55.2557373046875,
+        "Z": 0
+      },
+      "WEAPON": "RAILGUN"
+    },
+    "WARMUP": true
+  },
+  "TYPE": "PLAYER_DEATH"
+}

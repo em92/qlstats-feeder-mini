@@ -1,0 +1,32 @@
+﻿[
+  {
+    "DATA": {
+      "KILLER": {
+        "NAME": "^7Predat^1H0^7r",
+        "OLD_TEAM": "SPECTATOR",
+        "STEAM_ID": "76561198137367816",
+        "TEAM": "FREE"
+      },
+      "MATCH_GUID": "7567b53d-589e-4cfe-a9d5-1b9a7fdf1c00",
+      "TIME": 11,
+      "WARMUP": true
+    },
+    "TYPE": "PLAYER_SWITCHTEAM"
+  },
+
+
+  {
+    "DATA": {
+      "KILLER": {
+        "NAME": "^7Predat^1H0^7r",
+        "OLD_TEAM": "RED",
+        "STEAM_ID": "76561198137367816",
+        "TEAM": "SPECTATOR"
+      },
+      "MATCH_GUID": "c80d36fb-d08a-4b64-a483-38a0da25d5c6",
+      "TIME": 72,
+      "WARMUP": true
+    },
+    "TYPE": "PLAYER_SWITCHTEAM"
+  }
+]

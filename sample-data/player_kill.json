@@ -1,0 +1,69 @@
+﻿{
+  "DATA": {
+    "KILLER": {
+      "AIRBORNE": false,
+      "AMMO": 0,
+      "ARMOR": 0,
+      "BOT": false,
+      "BOT_SKILL": null,
+      "HEALTH": 0,
+      "HOLDABLE": null,
+      "NAME": "^7Predat^1H0^7r",
+      "POSITION": {
+        "X": -288,
+        "Y": 504,
+        "Z": 24.23840522766113
+      },
+      "POWERUPS": null,
+      "SPEED": 0,
+      "STEAM_ID": "76561198137367816",
+      "SUBMERGED": false,
+      "TEAM": 0,
+      "VIEW": {
+        "X": -2.5872802734375,
+        "Y": -11.7828369140625,
+        "Z": 0
+      },
+      "WEAPON": "OTHER_WEAPON"
+    },
+    "MATCH_GUID": "7567b53d-589e-4cfe-a9d5-1b9a7fdf1c00",
+    "MOD": "SWITCHTEAM",
+    "OTHER_TEAM_ALIVE": null,
+    "OTHER_TEAM_DEAD": null,
+    "ROUND": null,
+    "SUICIDE": true,
+    "TEAMKILL": false,
+    "TEAM_ALIVE": null,
+    "TEAM_DEAD": null,
+    "TIME": 203,
+    "VICTIM": {
+      "AIRBORNE": false,
+      "AMMO": 25,
+      "ARMOR": 0,
+      "BOT": false,
+      "BOT_SKILL": null,
+      "HEALTH": 100,
+      "HOLDABLE": null,
+      "NAME": "^7Predat^1H0^7r",
+      "POSITION": {
+        "X": -288,
+        "Y": 504,
+        "Z": 24.23840522766113
+      },
+      "POWERUPS": null,
+      "SPEED": 0,
+      "STEAM_ID": "76561198137367816",
+      "STREAK": 0,
+      "SUBMERGED": false,
+      "TEAM": 0,
+      "VIEW": {
+        "X": -2.5872802734375,
+        "Y": -11.7828369140625,
+        "Z": 0
+      },
+      "WEAPON": "RAILGUN"
+    },
+    "WARMUP": true
+  },
+  "TYPE": "PLAYER_KILL"
+}
