@@ -6,7 +6,7 @@
     <ProjectGuid>{e8a8d291-9163-4cde-9ac1-b01e406db719}</ProjectGuid>
     <ProjectHome />
     <ProjectView>ShowAllFiles</ProjectView>
-    <StartupFile>feeder.node.js</StartupFile>
+    <StartupFile>fill-server-geoip.js</StartupFile>
     <WorkingDirectory>.</WorkingDirectory>
     <OutputPath>.</OutputPath>
     <ProjectTypeGuids>{3AF33F2E-1136-4D97-BBB7-1795711AC8B8};{349c5851-65df-11da-9384-00065b846f21};{9092AA53-FB77-4645-B42D-1CCCA6BD08BD}</ProjectTypeGuids>
@@ -32,14 +32,17 @@
     <Content Include="README.md" />
     <Compile Include="backfill-factory.node.js" />
     <Compile Include="feeder.node.js" />
-    <Compile Include="glicko1.js" />
-    <Compile Include="gamerating.js" />
+    <Compile Include="modules\geoip.js" />
+    <Compile Include="fill-server-geoip.js" />
+    <Compile Include="validate-glicko.js" />
+    <Compile Include="modules\glicko1.js" />
+    <Compile Include="modules\gamerating.js" />
     <Compile Include="rerun-glicko.node.js" />
     <Compile Include="rerun-jsons.node.js" />
     <Compile Include="rerun-ts.node.js" />
-    <Compile Include="statsconn.js" />
-    <Compile Include="webadmin.js" />
-    <Compile Include="webapi.js" />
+    <Compile Include="modules\statsconn.js" />
+    <Compile Include="modules\webadmin.js" />
+    <Compile Include="modules\webapi.js" />
     <Content Include="htdocs\servers.html" />
     <Content Include="sample-data\matchreport.json" />
     <Content Include="sample-data\playerstats1.json" />
@@ -57,6 +60,7 @@
   </ItemGroup>
   <ItemGroup>
     <Folder Include="htdocs" />
+    <Folder Include="modules\" />
     <Folder Include="ql-match-jsons" />
     <Folder Include="ql-match-jsons\2015-03" />
     <Folder Include="ql-match-jsons\2015-03\03" />

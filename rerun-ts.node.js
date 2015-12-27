@@ -2,8 +2,8 @@
   fs = require("graceful-fs"),
   pg = require("pg"),
   zlib = require("zlib"),
-  //ts = require("trueskill"),
-  ts = require("com.izaakschroeder.trueskill").create(),
+  ts = require("trueskill"),
+  //ts = require("com.izaakschroeder.trueskill").create(),
   Q = require("q");
 
 var _config;

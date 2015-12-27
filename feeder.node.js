@@ -38,7 +38,7 @@ const
   Q = require("q"),
   express = require("express"),
   http = require("http"),
-  StatsConnection = require("./statsconn");
+  StatsConnection = require("./modules/statsconn");
 
 const IpPortPassRegex = /^(?:([^:]*):)?((?:[0-9]{1,3}\.){3}[0-9]{1,3}):([0-9]+)(?:\/(.*))?$/; // IP:port/pass
 
@@ -177,6 +177,9 @@ function upgradeConfigVersion() {
     _config.feeder.xonstatSubmissionUrl = "http://localhost:" + port + "/stats/submit";
   }
 
+  if (typeof (_config.feeder.calculateGlicko) == "undefined")
+    _config.feeder.calculateGlicko = true;
+
   return JSON.stringify(_config) != oldConfig;
 }
 
@@ -222,7 +225,7 @@ function startHttpd() {
 
   if (_config.webadmin.enabled) {
     _logger.info("starting webadmin");
-    var webadmin = require("./webadmin");
+    var webadmin = require("./modules/webadmin");
     webadmin.init(_config, app, {
       getStatsConnections: function() { return _statsConnections; },
       addServer: addServer,
@@ -233,7 +236,7 @@ function startHttpd() {
 
   if (_config.webapi.enabled) {
     _logger.info("starting webapi");
-    var webapi = require("./webapi");
+    var webapi = require("./modules/webapi");
     webapi.init(_config, app);
   }
 
@@ -532,11 +535,13 @@ function processGameData(game) {
   var report = createXonstatMatchReport(gt, game);
   return postMatchReportToXonstat(addr, game, report)
     .then(function (result) {
+      if (!_config.feeder.calculateGlicko)
+        return Q(true);
       if (!result.ok || !result.game_id) {
         _logger.debug("game could not be rated: " + game.matchStats.MATCH_GUID);
         return Q(false);
       }
-      var rating = require("./gamerating");
+      var rating = require("./modules/gamerating");
       return rating.rateSingleGame(result.game_id, game);
     })
     .catch(function(err) {
