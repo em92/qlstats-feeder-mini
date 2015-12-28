@@ -1,14 +1,17 @@
-﻿var
+﻿const
   fs = require("graceful-fs"),
   pg = require("pg"),
-    log4js = require("log4js"),
+  log4js = require("log4js"),
   request = require("request"),
+  gsq = require("game-server-query"),
   Q = require("q");
 
 exports.init = init;
 
 var _config;
 var _logger = log4js.getLogger("webapi");
+
+const GameTypes = { 0: "FFA", 1: "Duel", 2: "Race", 3: "TDM", 4: "CA", 5: "CTF", 6: "1Flag", 8: "Harv", 9: "FT", 10: "Dom", 11: "A&D", 12: "RR" };
 
 // interface for communication with the feeder.node.js module
 var _feeder = {
@@ -59,6 +62,13 @@ function init(config, app, feeder) {
 
   app.get("/api/server/:addr/players", function (req, res) {
     Q(getServerPlayers(req))
+      .then(function (obj) { res.json(obj); })
+      .catch(function (err) { res.json({ ok: false, msg: "internal error: " + err }); })
+      .finally(function () { res.end(); });
+  });
+
+  app.get("/api/server/:addr/query", function (req, res) {
+    Q(runServerBrowserQuery(req))
       .then(function (obj) { res.json(obj); })
       .catch(function (err) { res.json({ ok: false, msg: "internal error: " + err }); })
       .finally(function () { res.end(); });
@@ -144,7 +154,6 @@ function getServerStatusdump(req) {
 
   var info = {};
   var conns = _feeder.getStatsConnections();
-  if (!conns) return {};
   var addrs = Object.keys(conns);
   addrs.forEach(function (addr) {
     var conn = conns[addr];
@@ -156,6 +165,7 @@ function getServerStatusdump(req) {
 
 
 var _getServerSkillratingCache = { timestamp: 0, data: null };
+var _getServerGametypeCache = {};
 
 // get a complete list of all servers from all feeder instances with current game type and min/max/avg player rating
 function getServerSkillrating() {
@@ -223,11 +233,22 @@ function getServerSkillrating() {
   function rateServers(skillInfo) {
     var info = [];
     var addrs = Object.keys(aggregateInfo);
+    var delay = 0;
     addrs.forEach(function(addr) {
       var conn = aggregateInfo[addr];
-      var gt = conn.gt;
-      if (typeof (conn.p) == "undefined" || !gt)
+      var gt = conn.gt || _getServerGametypeCache[addr];
+      if (!gt) {
+        // execute browser query in the background and put the result in the cache for the next call to this API
+        Q.delay(delay += 100).then(function() {
+          runServerBrowserQueryInternal(addr).then(function(result) {
+            if (!result.state.error && result.state.raw && result.state.raw.rules) {
+              gt = (GameTypes[parseInt(result.state.raw.rules.g_gametype)] || "").toLowerCase();
+              _getServerGametypeCache[addr] = gt;
+            }
+          });
+        }).catch();
         return;
+      }
 
       var totalRating = 0;
       var maxRating = 0;
@@ -244,12 +265,30 @@ function getServerSkillrating() {
         maxRating = Math.max(maxRating, rating);
         minRating = Math.min(minRating, rating);
       }, []);
-      if (count > 0)
-        info.push({ server: addr, gt: gt, min: Math.round(minRating), avg: Math.round(totalRating / count), max: Math.round(maxRating) });
+      info.push({ server: addr, gt: gt, min: count == 0 ? 0 : Math.round(minRating), avg: count == 0 ? 0 : Math.round(totalRating / count), max: Math.round(maxRating) });
     });
 
     _getServerSkillratingCache.timestamp = now;
     _getServerSkillratingCache.data = info;
     return info;
   }
+}
+
+function runServerBrowserQuery(req) {
+  var addr = req.params.addr;
+  if (!addr) return { ok: false, msg: "No server address specified" };
+  return runServerBrowserQueryInternal(addr);
+}
+
+function runServerBrowserQueryInternal(addr) {
+  var parts = addr.split(":");
+  var host = parts[0];
+  var port = (parts[1] ? parseInt(parts[1]) : 0) || 27960;
+  
+  var def = Q.defer();
+  gsq({ type: "toxikk", host: host, port: port }, function (state) { def.resolve(state); });
+  return def.promise
+    .then(function(state) {
+      return { ok: true, state: state };
+    });
 }
