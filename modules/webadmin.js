@@ -24,7 +24,7 @@ function init(config, app, feeder) {
   _logger.setLevel(config.webadmin.logLevel || "INFO");
 
   var express = require("express");
-  app.use(express.static(__dirname + "/htdocs"));
+  app.use(express.static(__dirname + "/../htdocs"));
   app.use(bodyParser.json());
 
   app.get("/", function(req, res) {

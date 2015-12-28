@@ -1,0 +1,10 @@
+{
+   "DATA" : {
+      "MATCH_GUID" : "473ec713-f1d1-49dc-8a10-36c4475a3f46",
+      "NAME" : "^3 ∑ ^7yttrium",
+      "STEAM_ID" : "76561197968561413",
+      "TIME" : 765,
+      "WARMUP" : false
+   },
+   "TYPE" : "PLAYER_DISCONNECT"
+}

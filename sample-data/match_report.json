@@ -1,0 +1,31 @@
+{
+   "DATA" : {
+      "ABORTED" : true,
+      "CAPTURE_LIMIT" : 8,
+      "EXIT_MSG" : "Shutdown",
+      "FACTORY" : "duel",
+      "FACTORY_TITLE" : "Duel",
+      "FIRST_SCORER" : "none",
+      "FRAG_LIMIT" : 0,
+      "GAME_LENGTH" : 1111,
+      "GAME_TYPE" : "DUEL",
+      "INFECTED" : 0,
+      "INSTAGIB" : 0,
+      "LAST_LEAD_CHANGE_TIME" : 1070425,
+      "LAST_SCORER" : "none",
+      "LAST_TEAMSCORER" : "none",
+      "MAP" : "bloodrun",
+      "MATCH_GUID" : "ad66dd2c-b704-4af9-8150-e633588c2bc3",
+      "MERCY_LIMIT" : 0,
+      "QUADHOG" : 0,
+      "RESTARTED" : 0,
+      "ROUND_LIMIT" : 10,
+      "SCORE_LIMIT" : 150,
+      "SERVER_TITLE" : "Gravelines Geheimlevel duel #5",
+      "TIME_LIMIT" : 10,
+      "TRAINING" : 0,
+      "TSCORE0" : 0,
+      "TSCORE1" : 0
+   },
+   "TYPE" : "MATCH_REPORT"
+}

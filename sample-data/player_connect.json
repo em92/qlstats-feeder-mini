@@ -1,0 +1,10 @@
+{
+   "DATA" : {
+      "MATCH_GUID" : "2af35f17-7748-4533-b5c6-839fc4f09c6b",
+      "NAME" : "[ByQ]Descent",
+      "STEAM_ID" : "76561198256168099",
+      "TIME" : 267,
+      "WARMUP" : false
+   },
+   "TYPE" : "PLAYER_CONNECT"
+}

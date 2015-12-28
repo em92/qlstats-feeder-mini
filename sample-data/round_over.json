@@ -1,0 +1,10 @@
+﻿{
+  "DATA": {
+    "MATCH_GUID": "dad7e64b-c397-4984-b343-6943bdc070d0",
+    "ROUND": 2,
+    "TEAM_WON": "BLUE",
+    "TIME": 56,
+    "WARMUP": false
+  },
+  "TYPE": "ROUND_OVER"
+}

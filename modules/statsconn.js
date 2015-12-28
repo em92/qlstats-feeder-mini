@@ -28,24 +28,28 @@ function StatsConnection(owner, ip, port, pass, onZmqMessageCallback) {
   this.port = port;
   this.pass = pass;
   this.onZmqMessageCallback = onZmqMessageCallback;
-
+  
   this.addr = ip + ":" + port;
   this.matchStarted = false;
   this.playerStats = [];
   this.reconnectTimer = null;
-
+  
   this.connecting = false;
   this.connected = false;
   this.disconnected = false;
   this.badPassword = false;
   this.lastMessageUtc = 0;
   this.connectUtc = 0;
+  
+  // stuff for the webapi
+  this.players = {};
+  this.gameType = null;
 }
 
 StatsConnection.prototype.connect = function (isReconnect) {
   var self = this;
   var failAttempt = 0;
-
+  
   this.badPassword = false;
   this.disconnected = false;
   this.connected = false;
@@ -54,16 +58,16 @@ StatsConnection.prototype.connect = function (isReconnect) {
   if (this.reconnectTimer)
     clearTimeout(this.reconnectTimer);
   this.reconnectTimer = null;
-
+  
   this.sub = zmq.socket("sub");
   if (this.pass) {
     this.sub.sap_domain = "stats";
     this.sub.plain_username = "stats";
     this.sub.plain_password = this.pass;
   }
-
+  
   //_logger.debug(self.addr + ": trying to connect");
-
+  
   this.sub.on("connect", function () {
     self.connected = true;
     self.connectUtc = Date.now();
@@ -73,7 +77,7 @@ StatsConnection.prototype.connect = function (isReconnect) {
       _logger.info(self.addr + ": connected successfully");
     self.resetIdleTimeout();
   });
-
+  
   this.sub.on("connect_delay", function () {
     if (failAttempt++ == 3)
       _logger.warn(self.addr + ": failed to connect, but will keep trying...");
@@ -82,7 +86,7 @@ StatsConnection.prototype.connect = function (isReconnect) {
       self.startReconnectTimer();
     }
   });
-
+  
   this.sub.on("connect_retry", function () {
     self.connecting = true;
     if (Date.now() - self.connectUtc >= ConnectAttemptInterval) {
@@ -92,13 +96,13 @@ StatsConnection.prototype.connect = function (isReconnect) {
     else if (failAttempt % 40 == 0)
       _logger.debug(self.addr + ": retrying to connect");
   });
-
+  
   this.sub.on("message", function (data) {
     self.lastMessageUtc = Date.now();
     self.onZmqMessageCallback(self, data);
     self.resetIdleTimeout();
   });
-
+  
   this.sub.on("disconnect", function () {
     if (Date.now() - self.connectUtc <= WrongPasswordInterval) {
       _logger.warn(self.addr + ": disconnected (probably wrong password)");
@@ -114,20 +118,20 @@ StatsConnection.prototype.connect = function (isReconnect) {
     }
     self.connected = false;
   });
-
+  
   this.sub.on("monitor_error", function () {
     if (!self.disconnected) {
       _logger.error(self.addr + ": error monitoring network status");
-      setTimeout(function() { self.sub.monitor(MonitorInterval, 0); });
+      setTimeout(function () { self.sub.monitor(MonitorInterval, 0); });
     }
   });
-
+  
   this.sub.monitor(MonitorInterval, 0);
   this.sub.connect("tcp://" + this.addr);
   this.sub.subscribe("");
 }
 
-StatsConnection.prototype.startReconnectTimer = function() {
+StatsConnection.prototype.startReconnectTimer = function () {
   var self = this;
   this.reconnectTimer = setTimeout(function () { self.connect(); }, OfflineServerRetryInterval);
 }
@@ -157,14 +161,17 @@ StatsConnection.prototype.disconnect = function () {
   this.connecting = false;
   this.lastMessageUtc = 0;
   this.disconnected = true;
-
+  
   if (this.idleTimeout)
     clearTimeout(this.idleTimeout);
   this.idleTimeout = null;
-
+  
   if (this.reconnectTimer)
     clearTimeout(this.reconnectTimer);
   this.reconnectTimer = null;
+  
+  this.players = {};
+  //this.gameType = null;
 }
 
 StatsConnection.prototype.compareTo = function (other) {
@@ -175,7 +182,7 @@ StatsConnection.prototype.compareTo = function (other) {
   if (this.port < other.port) return -1;
   if (this.port > other.port) return +1;
   return 0;
-
+  
   function compareIp(a, b) {
     var x = a.split(".").map(function (n) { return parseInt(n); });
     var y = b.split(".").map(function (n) { return parseInt(n); });

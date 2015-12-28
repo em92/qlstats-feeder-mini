@@ -1,0 +1,33 @@
+{
+   "DATA" : {
+      "CAPTURE_LIMIT" : 8,
+      "FACTORY" : "duel",
+      "FACTORY_TITLE" : "Duel",
+      "FRAG_LIMIT" : 0,
+      "GAME_TYPE" : "DUEL",
+      "INFECTED" : 0,
+      "INSTAGIB" : 0,
+      "MAP" : "toxicity",
+      "MATCH_GUID" : "66fe025a-63ff-4852-96bd-9102411e9fb0",
+      "MERCY_LIMIT" : 0,
+      "PLAYERS" : [
+         {
+            "NAME" : "Play_ua",
+            "STEAM_ID" : "76561198157458366",
+            "TEAM" : 0
+         },
+         {
+            "NAME" : "goromir",
+            "STEAM_ID" : "76561198145690430",
+            "TEAM" : 0
+         }
+      ],
+      "QUADHOG" : 0,
+      "ROUND_LIMIT" : 10,
+      "SCORE_LIMIT" : 150,
+      "SERVER_TITLE" : ".de #topdog.io Ranked Duel #4",
+      "TIME_LIMIT" : 10,
+      "TRAINING" : 0
+   },
+   "TYPE" : "MATCH_STARTED"
+}

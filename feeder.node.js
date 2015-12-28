@@ -180,6 +180,9 @@ function upgradeConfigVersion() {
   if (typeof (_config.feeder.calculateGlicko) == "undefined")
     _config.feeder.calculateGlicko = true;
 
+  if (typeof (_config.webapi.aggregatePanelPorts) == "undefined")
+    _config.webapi.aggregatePanelPorts = [];
+
   return JSON.stringify(_config) != oldConfig;
 }
 
@@ -223,22 +226,26 @@ function startFeeder() {
 function startHttpd() {
   var app = express();
 
+  if (!_config.httpd.port)
+    return;
+
+  var callbacks = {
+    getStatsConnections: function() { return _statsConnections; },
+    addServer: addServer,
+    removeServer: removeServer,
+    writeConfig: writeConfig
+  };
+
   if (_config.webadmin.enabled) {
     _logger.info("starting webadmin");
     var webadmin = require("./modules/webadmin");
-    webadmin.init(_config, app, {
-      getStatsConnections: function() { return _statsConnections; },
-      addServer: addServer,
-      removeServer: removeServer,
-      writeConfig: writeConfig
-    });
+    webadmin.init(_config, app, callbacks);
   }
-
-  if (_config.webapi.enabled) {
-    _logger.info("starting webapi");
-    var webapi = require("./modules/webapi");
-    webapi.init(_config, app);
-  }
+  
+  // WebAPI is always started for internal APIs, public APIs can be disabled through the config file
+  _logger.info("starting webapi");
+  var webapi = require("./modules/webapi");
+  webapi.init(_config, app, callbacks);
 
   app.listen(_config.httpd.port);
 }
@@ -430,12 +437,29 @@ function removeServer(conn) {
  * Callback function for events on ZeroMQ connections
  */
 function onZmqMessageCallback(conn, data) {
-  var msg = data.toString();
-  var obj = JSON.parse(msg);
+  var msg = data.toString(); 
+  var obj = JSON.parse(msg); 
   _logger.trace(conn.addr + ": received ZMQ message: " + msg);
-  if (obj.TYPE == "MATCH_STARTED") {
+
+  //fs.writeFileSync("temp/" + obj.TYPE.toLowerCase() + ".json", msg);
+
+  if (obj.TYPE == "PLAYER_CONNECT") {
+    setPlayerTeam(conn, obj.DATA.STEAM_ID, 3);
+  }
+  else if (obj.TYPE == "PLAYER_DISCONNECT") {
+    delete conn.players[obj.DATA.STEAM_ID];
+  }
+  else if (obj.TYPE == "PLAYER_SWITCHTEAM") {
+    setPlayerTeam(conn, obj.DATA.KILLER.STEAM_ID, obj.DATA.KILLER.TEAM);
+  }
+  else if (obj.TYPE == "PLAYER_KILL") {
+    setPlayerTeam(conn, obj.DATA.KILLER.STEAM_ID, obj.DATA.KILLER.TEAM);
+    setPlayerTeam(conn, obj.DATA.VICTIM.STEAM_ID, obj.DATA.VICTIM.TEAM);
+  }
+  else if (obj.TYPE == "MATCH_STARTED") {
     _logger.debug(conn.addr + ": match started");
     conn.matchStarted = true;
+    conn.gameType = (obj.DATA.GAME_TYPE || "").toLowerCase() || null;
   }
   else if (obj.TYPE == "PLAYER_STATS") {
     if (!obj.DATA.WARMUP)
@@ -451,6 +475,9 @@ function onZmqMessageCallback(conn, data) {
       playerStats: conn.playerStats
     };
     conn.playerStats = [];
+    //conn.players = {};
+    //conn.gameType = null;  // assume it will stay the same, since QL doesn't provide any timely update after map change
+    conn.matchStarted = false;
 
     // save .json.gz and/or process the data for uploading it to xonstatdb
     var tasks = [];
@@ -461,6 +488,13 @@ function onZmqMessageCallback(conn, data) {
     Q
       .allSettled(tasks)
       .catch(function(err) { _logger.error(err.stack); });
+  }
+
+  function setPlayerTeam(conn, steamid, team) {
+    if (!conn.players[steamid])
+      conn.players[steamid] = { team: -1 };
+    var teams = [0, "0", "FREE", 1, "1", "RED", 2, "2", "BLUE", 3, "3", "SPECTATOR"];
+    conn.players[steamid].team = Math.floor(teams.indexOf(team) / 3);    
   }
 }
 
