@@ -30,7 +30,7 @@ function StatsConnection(owner, ip, port, pass, onZmqMessageCallback) {
   this.onZmqMessageCallback = onZmqMessageCallback;
   
   this.addr = ip + ":" + port;
-  this.matchStarted = false;
+  this.matchStartTime = 0;
   this.playerStats = [];
   this.reconnectTimer = null;
   
@@ -44,6 +44,7 @@ function StatsConnection(owner, ip, port, pass, onZmqMessageCallback) {
   // stuff for the webapi
   this.players = {};
   this.gameType = null;
+  this.round = 0;
 }
 
 StatsConnection.prototype.connect = function (isReconnect) {

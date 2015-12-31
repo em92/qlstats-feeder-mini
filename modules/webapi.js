@@ -8,6 +8,7 @@
 
 exports.init = init;
 
+var DEBUG = false;
 var _config;
 var _logger = log4js.getLogger("webapi");
 
@@ -15,64 +16,69 @@ const GameTypes = { 0: "FFA", 1: "Duel", 2: "Race", 3: "TDM", 4: "CA", 5: "CTF",
 
 // interface for communication with the feeder.node.js module
 var _feeder = {
-  getStatsConnections: function () { }
+  getStatsConnections: function() {}
 };
 
 function init(config, app, feeder) {
   _config = config;
   _feeder = feeder;
   _logger.setLevel(config.webapi.logLevel || "INFO");
-  
-  app.get("/api/server/statusdump", function (req, res) {
+
+  // Internal API methods
+
+  app.get("/api/server/statusdump", function(req, res) {
     Q(getServerStatusdump(req))
-      .then(function (obj) { res.json(obj); })
-      .catch(function (err) { res.json({ ok: false, msg: "internal error: " + err }); })
-      .finally(function () { res.end(); });
+      .then(function(obj) { res.json(obj); })
+      .catch(function(err) { res.json({ ok: false, msg: "internal error: " + err }); })
+      .finally(function() { res.end(); });
   });
 
   if (!_config.webapi.enabled)
     return;
 
+  // Public API methods
+
   app.get("/api/jsons/:date", function(req, res) {
     Q(listJsons(req))
-      .then(function (result) { res.json(result); })
-      .catch(function (err) { res.json({ ok: false, msg: "internal error: " + err }); })
-      .finally(function () { res.end(); });
+      .then(function(result) { res.json(result); })
+      .catch(function(err) { res.json({ ok: false, msg: "internal error: " + err }); })
+      .finally(function() { res.end(); });
   });
 
-  app.get("/api/jsons/:date/:file.json(.gz)?", function (req, res) {
+  app.get("/api/jsons/:date/:file.json(.gz)?", function(req, res) {
     Q(getJson(req, res))
-      .catch(function (err) { res.json({ ok: false, msg: "internal error: " + err }); })
-      .finally(function () { res.end(); });
+      .catch(function(err) { res.json({ ok: false, msg: "internal error: " + err }); })
+      .finally(function() { res.end(); });
   });
 
-  app.get("/api/jsons", function (req, res) {
+  app.get("/api/jsons", function(req, res) {
     Q(queryJson(req))
-      .then(function (obj) { res.json(obj); })
-      .catch(function (err) { res.json({ ok: false, msg: "internal error: " + err }); })
-      .finally(function () { res.end(); });
+      .then(function(obj) { res.json(obj); })
+      .catch(function(err) { res.json({ ok: false, msg: "internal error: " + err }); })
+      .finally(function() { res.end(); });
   });
-    
-  app.get("/api/server/skillrating", function (req, res) {
+
+  app.get("/api/server/skillrating", function(req, res) {
     Q(getServerSkillrating(req))
-      .then(function (obj) { res.json(obj); })
-      .catch(function (err) { res.json({ ok: false, msg: "internal error: " + err }); })
-      .finally(function () { res.end(); });
+      .then(function(obj) { res.json(obj); })
+      .catch(function(err) { res.json({ ok: false, msg: "internal error: " + err }); })
+      .finally(function() { res.end(); });
   });
 
-  app.get("/api/server/:addr/players", function (req, res) {
-    Q(getServerPlayers(req))
-      .then(function (obj) { res.json(obj); })
-      .catch(function (err) { res.json({ ok: false, msg: "internal error: " + err }); })
-      .finally(function () { res.end(); });
-  });
-
-  app.get("/api/server/:addr/query", function (req, res) {
+  app.get("/api/server/:addr/query", function(req, res) {
     Q(runServerBrowserQuery(req))
-      .then(function (obj) { res.json(obj); })
-      .catch(function (err) { res.json({ ok: false, msg: "internal error: " + err }); })
-      .finally(function () { res.end(); });
+      .then(function(obj) { res.json(obj); })
+      .catch(function(err) { res.json({ ok: false, msg: "internal error: " + err }); })
+      .finally(function() { res.end(); });
   });
+
+  app.get("/api/server/:addr/players", function(req, res) {
+    Q(getServerPlayers(req))
+      .then(function(obj) { res.json(obj); })
+      .catch(function(err) { res.json({ ok: false, msg: "internal error: " + err }); })
+      .finally(function() { res.end(); });
+  });
+
 }
 
 // to be removed, deprecated by queryJson
@@ -84,8 +90,8 @@ function listJsons(req) {
   var dir = __dirname + "/" + _config.feeder.jsondir + "/" + date.getUTCFullYear() + "-" + ("0" + (date.getUTCMonth() + 1)).substr(-2) + "/" + ("0" + date.getUTCDate()).substr(-2);
   return Q
     .nfcall(fs.readdir, dir)
-    .then(function (files) { return { ok: true, files: files.map(function (name) { return name.substr(0, name.indexOf(".json")) }) }; })
-    .catch(function () { return { ok: false, msg: "File not found" } });
+    .then(function(files) { return { ok: true, files: files.map(function(name) { return name.substr(0, name.indexOf(".json")) }) }; })
+    .catch(function() { return { ok: false, msg: "File not found" } });
 }
 
 function getJson(req, res) {
@@ -101,7 +107,7 @@ function getJson(req, res) {
     dotfiles: "deny",
     headers: asGzip ? {} : { "Content-Type": "application/json", "Content-Encoding": "gzip" }
   };
-  return Q.ninvoke(res, "sendFile", req.params.file + ".json.gz", options).catch(function () { return res.json({ ok: false, msg: "File not found" })});
+  return Q.ninvoke(res, "sendFile", req.params.file + ".json.gz", options).catch(function() { return res.json({ ok: false, msg: "File not found" }) });
 }
 
 function queryJson(req) {
@@ -122,40 +128,41 @@ function queryJson(req) {
     });
 }
 
-function dbConnect() {
-  var defConnect = Q.defer();
-  pg.connect(_config.webapi.database, function (err, cli, release) {
-    if (err)
-      defConnect.reject(new Error(err));
-    else {
-      cli.release = release;
-      defConnect.resolve(cli);
-    }
-  });
-  return defConnect.promise;
-}
-
 function getServerPlayers(req) {
   var addr = req.params.addr;
   if (!addr) return { ok: false, msg: "No server address specified" };
-  var conns = _feeder.getStatsConnections();
-  var conn = conns[addr];
-  if (!conn) return { ok: false, msg: "Server is not being tracked (by this panel instance)" };
-  
-  var keys = conn.players ? Object.keys(conn.players) : [];
-  var players = keys.map(function(steamid) { return { steamid: steamid, team: conn.players[steamid].team }; });
-  return { ok: true, players: players };
+
+  return Q(getAggregatedServerStatusData())
+    .then(function(serverStatus) {
+      var status = serverStatus[addr];
+      if (!status) return { ok: false, msg: "Server is not being tracked" };
+
+      var keys = status.p ? Object.keys(status.p) : [];
+      var players = keys.map(function(steamid) {
+        var player = status.p[steamid];
+        var gt = status.gt || _getServerGametypeCache[addr];
+        var getRating = gt ? Q(getSkillRatings()).then(function(ratings) {
+           return ratings[steamid] ? ratings[steamid][gt] : undefined;
+        }) : Q(undefined);
+        return getRating.then(function(rating) { return { steamid: steamid, name: player.name, team: player.team, rating: rating, time: player.time } });
+      });
+      return Q.all(players).then(function(results) {
+        return { ok: true, players: results };
+      });
+
+    });
 }
+
 
 // internal API used to aggregate live server information from multiple feeder instances
 function getServerStatusdump(req) {
-  if (req && req.connection.remoteAddress.indexOf("127.0.0.") < 0 && req.connection.remoteAddress != "::1")
+  if (!isInternalRequest(req))
     return { ok: false, msg: "only internal connections allowed" };
 
   var info = {};
   var conns = _feeder.getStatsConnections();
   var addrs = Object.keys(conns);
-  addrs.forEach(function (addr) {
+  addrs.forEach(function(addr) {
     var conn = conns[addr];
     if (!conn.connected) return;
     info[addr] = { gt: conn.gameType, p: conn.players };
@@ -164,78 +171,33 @@ function getServerStatusdump(req) {
 }
 
 
-var _getServerSkillratingCache = { timestamp: 0, data: null };
+// get a complete list of all servers from all feeder instances with current game type and min/max/avg player rating
+var _getServerSkillratingCache = { timestamp: 0, data: null, updatePromise: null };
 var _getServerGametypeCache = {};
 
-// get a complete list of all servers from all feeder instances with current game type and min/max/avg player rating
 function getServerSkillrating() {
   var now = new Date().getTime();
   if (_getServerSkillratingCache.timestamp + 15000 > now)
     return _getServerSkillratingCache.data;
+  if (_getServerSkillratingCache.updatePromise != null)
+    return _getServerSkillratingCache.updatePromise;
 
-  var aggregateInfo = {}; //getServerStatusdump();}
-  var tasks = [];
-  _config.webapi.aggregatePanelPorts.forEach(function(port) {
-    //if (port != _config.httpd.port)
-      tasks.push(getStatusdumpFromPort(port).catch(function (err) { _logger.error("aggregate from port " + port + ": " + err); }));
-  });
+  return _getServerSkillratingCache.updatePromise = Q
+    .all([getAggregatedServerStatusData(), getSkillRatings()])
+    .then(function(results) { return rateServers(results[0], results[1]); })
+    .catch(function(err) {
+      _logger.error(err);
+      throw err;
+    })
+    .finally(function() { _getServerSkillratingCache.updatePromise = null; });
 
-  return dbConnect().then(function(cli) {
-    return Q.allSettled(tasks)
-      .then(function() {
-        return Q.ninvoke(cli, "query", { name: "serverskill", text: "select hashkey, game_type_cd, g2_r, g2_rd from hashkeys h inner join player_elos e on e.player_id=h.player_id where e.g2_games>=5" })
-          .then(function(result) { return mapSkillInfo(result.rows); })
-          .then(function (skillInfo) { return rateServers(skillInfo); })
-          .catch(function (err) { _logger.error(err); throw err; })
-          .finally(function() { cli.release(); });
-      });
-  });
-  
-  // load status dump from a different admin panel port and aggregate the information
-  function getStatusdumpFromPort(port) {
-    var defer = Q.defer();
-    var ok = true;
-    var buffer = "";
-    request.get("http://127.0.0.1:" + port + "/api/server/statusdump", { timeout: 1000 })
-      .on("error", function(err) { defer.reject(err); })
-      .on("response", function(response) {
-        if (response.statusCode != 200) {
-          ok = false;
-          defer.reject(new Error("HTTP status code " + response.statusCode));
-        }
-      })
-      .on("data", function(data) { buffer += data; })
-      .on("end", function() {
-        if (!ok) return;
-        var info = JSON.parse(buffer);
-        for (var key in info) {
-          if (!info.hasOwnProperty(key)) continue;
-          aggregateInfo[key] = info[key];
-        }
-        defer.resolve(info);
-      }).end();
-
-    return defer.promise;
-  }
-
-  // convert database rows to a dictionary player[steamid][game_type_cd] => number
-  function mapSkillInfo(rows) {
-    var info = {};
-    rows.forEach(function(row) {
-      var player = info[row.hashkey];
-      if (!player) info[row.hashkey] = player = {};
-      player[row.game_type_cd] = row.g2_r - row.g2_rd;
-    });
-    return info;
-  }
-  
   // combine information from players on servers with player ratings
-  function rateServers(skillInfo) {
+  function rateServers(serverStatus, skillInfo) {
     var info = [];
-    var addrs = Object.keys(aggregateInfo);
+    var addrs = Object.keys(serverStatus);
     var delay = 0;
     addrs.forEach(function(addr) {
-      var conn = aggregateInfo[addr];
+      var conn = serverStatus[addr];
       var gt = conn.gt || _getServerGametypeCache[addr];
       if (!gt) {
         // execute browser query in the background and put the result in the cache for the next call to this API
@@ -275,20 +237,134 @@ function getServerSkillrating() {
 }
 
 function runServerBrowserQuery(req) {
+  if (!isInternalRequest(req))
+    return { ok: false, msg: "only internal connections allowed" };
+
   var addr = req.params.addr;
   if (!addr) return { ok: false, msg: "No server address specified" };
   return runServerBrowserQueryInternal(addr);
+}
+
+
+// helper functions
+
+var _getSkillRatingsCache = { timestamp: 0, data: {}, updatePromise: null }
+var _getAggregatedStatusDataCache = { timestamp: 0, data: {}, updatePromise: null }
+
+function isInternalRequest(req) {
+  return !(req && req.connection.remoteAddress.indexOf("127.0.0.") < 0 && req.connection.remoteAddress != "::1");
+}
+
+function dbConnect() {
+  var defConnect = Q.defer();
+  pg.connect(_config.webapi.database, function(err, cli, release) {
+    if (err)
+      defConnect.reject(new Error(err));
+    else {
+      cli.release = release;
+      defConnect.resolve(cli);
+    }
+  });
+  return defConnect.promise;
 }
 
 function runServerBrowserQueryInternal(addr) {
   var parts = addr.split(":");
   var host = parts[0];
   var port = (parts[1] ? parseInt(parts[1]) : 0) || 27960;
-  
+
   var def = Q.defer();
-  gsq({ type: "toxikk", host: host, port: port }, function (state) { def.resolve(state); });
+  gsq({ type: "synergy", host: host, port: port }, function(state) { def.resolve(state); });
   return def.promise
     .then(function(state) {
       return { ok: true, state: state };
     });
+}
+
+function getSkillRatings() {
+  if (_getSkillRatingsCache.timestamp + 60 * 1000 > new Date().getTime())
+    return Q(_getSkillRatingsCache.data);
+  if (_getSkillRatingsCache.updatePromise !== null)
+    return _getSkillRatingsCache.updatePromise;
+
+  return _getSkillRatingsCache.updatePromise = dbConnect()
+    .then(function(cli) {
+      return Q
+        .ninvoke(cli, "query", { name: "serverskill", text: "select hashkey, game_type_cd, g2_r, g2_rd from hashkeys h inner join player_elos e on e.player_id=h.player_id where e.g2_games>=5" })
+        .then(function(result) {
+          _getSkillRatingsCache.data = mapSkillInfo(result.rows);
+          _getSkillRatingsCache.timestamp = new Date().getTime();
+          return _getSkillRatingsCache.data;
+        })
+        .finally(function() {
+          cli.release();
+          _getSkillRatingsCache.updatePromise = null;
+        });
+    });
+
+  function mapSkillInfo(rows) {
+    var info = {};
+    rows.forEach(function(row) {
+      var player = info[row.hashkey];
+      if (!player)
+        info[row.hashkey] = player = {};
+      player[row.game_type_cd] = Math.round(row.g2_r - row.g2_rd);
+    });
+    return info;
+  }
+}
+
+function getAggregatedServerStatusData() {
+  // bypass cache for single instance feeder/webadmin/webapi process
+  if (_config.webapi.aggregatePanelPorts.length == 0 || _config.webapi.aggregatePanelPorts.length == 1 && _config.webapi.aggregatePanelPorts[0] == _config.httpd.port)
+    return getServerStatusdump();
+
+  if (_getAggregatedStatusDataCache.timestamp + 5 * 1000 > new Date().getTime())
+    return Q(_getAggregatedStatusDataCache.data);
+  if (_getAggregatedStatusDataCache.updatePromise !== null)
+    return _getAggregatedStatusDataCache.updatePromise;
+
+  _getAggregatedStatusDataCache.updatePending = true;
+  var aggregateInfo = DEBUG ? {} : getServerStatusdump();
+  var tasks = [];
+  _config.webapi.aggregatePanelPorts.forEach(function(port) {
+    if (port != _config.httpd.port || DEBUG)
+      tasks.push(getStatusdumpFromPort(port).catch(function(err) { _logger.error("aggregate from port " + port + ": " + err); }));
+  });
+
+  return _getAggregatedStatusDataCache.updatePromise = Q
+    .all(tasks)
+    .then(function() {
+      _getAggregatedStatusDataCache.data = aggregateInfo;
+      _getAggregatedStatusDataCache.timestamp = new Date().getTime();
+      return aggregateInfo;
+    })
+    .finally(function() { _getAggregatedStatusDataCache.updatePromise = null; });
+
+  // load status dump from a different admin panel port and aggregate the information
+  function getStatusdumpFromPort(port) {
+    var defer = Q.defer();
+    var ok = true;
+    var buffer = "";
+    request.get("http://127.0.0.1:" + port + "/api/server/statusdump", { timeout: 1000 })
+      .on("error", function(err) { defer.reject(err); })
+      .on("response", function(response) {
+        if (response.statusCode != 200) {
+          ok = false;
+          defer.reject(new Error("HTTP status code " + response.statusCode));
+        }
+      })
+      .on("data", function(data) { buffer += data; })
+      .on("end", function() {
+        if (!ok) return;
+        var info = JSON.parse(buffer);
+        for (var key in info) {
+          if (!info.hasOwnProperty(key)) continue;
+          aggregateInfo[key] = info[key];
+        }
+        defer.resolve(info);
+      }).end();
+
+    return defer.promise;
+  }
 }

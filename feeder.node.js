@@ -444,22 +444,28 @@ function onZmqMessageCallback(conn, data) {
   //fs.writeFileSync("temp/" + obj.TYPE.toLowerCase() + ".json", msg);
 
   if (obj.TYPE == "PLAYER_CONNECT") {
-    setPlayerTeam(conn, obj.DATA.STEAM_ID, 3);
+    setPlayerTeam(conn, obj.DATA, 3);
   }
   else if (obj.TYPE == "PLAYER_DISCONNECT") {
     delete conn.players[obj.DATA.STEAM_ID];
   }
   else if (obj.TYPE == "PLAYER_SWITCHTEAM") {
-    setPlayerTeam(conn, obj.DATA.KILLER.STEAM_ID, obj.DATA.KILLER.TEAM);
+    setPlayerTeam(conn, obj.DATA.KILLER);
   }
   else if (obj.TYPE == "PLAYER_KILL") {
-    setPlayerTeam(conn, obj.DATA.KILLER.STEAM_ID, obj.DATA.KILLER.TEAM);
-    setPlayerTeam(conn, obj.DATA.VICTIM.STEAM_ID, obj.DATA.VICTIM.TEAM);
+    setPlayerTeam(conn, obj.DATA.KILLER);
+    setPlayerTeam(conn, obj.DATA.VICTIM);
   }
   else if (obj.TYPE == "MATCH_STARTED") {
     _logger.debug(conn.addr + ": match started");
-    conn.matchStarted = true;
+    var now = new Date().getTime();
+    conn.matchStartTime = now;
     conn.gameType = (obj.DATA.GAME_TYPE || "").toLowerCase() || null;
+    Object.keys(conn.players).forEach(function(k) { conn.players[k].time = now; });
+    conn.round = 1;
+  }
+  else if (obj.TYPE == "ROUND_OVER") {
+    ++conn.round;
   }
   else if (obj.TYPE == "PLAYER_STATS") {
     if (!obj.DATA.WARMUP)
@@ -477,7 +483,7 @@ function onZmqMessageCallback(conn, data) {
     conn.playerStats = [];
     //conn.players = {};
     //conn.gameType = null;  // assume it will stay the same, since QL doesn't provide any timely update after map change
-    conn.matchStarted = false;
+    conn.matchStartTime = 0;
 
     // save .json.gz and/or process the data for uploading it to xonstatdb
     var tasks = [];
@@ -490,11 +496,15 @@ function onZmqMessageCallback(conn, data) {
       .catch(function(err) { _logger.error(err.stack); });
   }
 
-  function setPlayerTeam(conn, steamid, team) {
-    if (!conn.players[steamid])
-      conn.players[steamid] = { team: -1 };
+  function setPlayerTeam(conn, playerData, overrideTeam) {
+    var steamid = playerData.STEAM_ID;
+    var player = conn.players[steamid];
+    if (!player)
+      conn.players[steamid] = player = { team: -1, time: new Date().getTime() };
     var teams = [0, "0", "FREE", 1, "1", "RED", 2, "2", "BLUE", 3, "3", "SPECTATOR"];
-    conn.players[steamid].team = Math.floor(teams.indexOf(team) / 3);    
+    var team = overrideTeam !== undefined ? overrideTeam : playerData.TEAM;
+    player.team = Math.floor(teams.indexOf(team) / 3);
+    player.name = playerData.NAME;
   }
 }
 
