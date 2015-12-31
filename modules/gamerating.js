@@ -18,7 +18,8 @@ const
   ERR_BOTMATCH = 4,
   ERR_TEAMTIMEDIFF = 5,
   ERR_MINPLAYERS = 6,
-  ERR_DATAFILEMISSING = 7;
+  ERR_DATAFILEMISSING = 7,
+  ERR_FACTORY_OR_SETTINGS = 8;
 
 const rateEachSingleMatch = true;
 var _config;
@@ -121,7 +122,7 @@ function createGameTypeStrategy(gametype) {
   var ValidateMatchForGametype = {
     "duel": function(json) { return json.matchStats.GAME_LENGTH >= 10 * 60 - 5 || json.matchStats.EXIT_MSG.indexOf("forfeited") >= 0 },
     "ffa": function(json) { return json.matchStats.FRAG_LIMIT >= 50 },
-    "ca": function(json) { return Math.max(json.matchStats.TSCORE0, json.matchStats.TSCORE1) >= 10 /* old JSONS have no ROUND_LIMIT */ },
+    "ca": function(json) { return Math.max(json.matchStats.TSCORE0, json.matchStats.TSCORE1) >= 8 /* old JSONS have no ROUND_LIMIT */ },
     "tdm": function(json) { return Math.max(json.matchStats.TSCORE0, json.matchStats.TSCORE1) >= 100 || json.matchStats.GAME_LENGTH >= 15 * 10 },
     "ctf": function(json) { return Math.max(json.matchStats.TSCORE0, json.matchStats.TSCORE1) >= 8 || json.matchStats.GAME_LENGTH >= 15 * 10 },
     "ft": function(json) { return Math.max(json.matchStats.TSCORE0, json.matchStats.TSCORE1) >= 8 /* old JSONS have no ROUND_LIMIT */ }
@@ -355,6 +356,11 @@ function extractDataFromGameObject(game) {
 
   if (game.matchStats.ABORTED) return ERR_ABORTED;
   if (!strategy.validateGame(game)) return ERR_ROUND_OR_TIMELIMIT;
+  if (game.matchStats.INSTAGIB) return ERR_FACTORY_OR_SETTINGS;
+  if (game.matchStats.INFECTED) return ERR_FACTORY_OR_SETTINGS;
+  if (game.matchStats.QUADHOG) return ERR_FACTORY_OR_SETTINGS;
+  if (game.matchStats.TRAINING) return ERR_FACTORY_OR_SETTINGS;
+  if (strategy.validFactories.indexOf(game.matchStats.FACTORY) < 0) return ERR_FACTORY_OR_SETTINGS;
 
   // aggregate total time, damage and score of player during a match (could have been switching teams)
   var playerData = {}

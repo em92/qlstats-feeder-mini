@@ -672,6 +672,8 @@ function createXonstatMatchReport(gt, game) {
         report.push("e acc-" + w + "-cnt-fired " + wstats.S);
         report.push("e acc-" + w + "-cnt-hit " + wstats.H);
         report.push("e acc-" + w + "-frags " + wstats.K);
+        report.push("e acc-" + w + "-fired " + wstats.DG);
+        report.push("e acc-" + w + "-hit " + wstats.DR);
       }
     }
   }
