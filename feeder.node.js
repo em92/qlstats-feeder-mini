@@ -567,7 +567,7 @@ function processGameData(game) {
     ++counts[player.TEAM || 0];
     return counts;
   }, [0, 0, 0]);
-  const minPlayers = { ffa: [4, 0, 0], duel: [2, 0, 0], ca: [0, 2, 2], ctf: [0, 2, 2], tdm: [0, 2, 2], ft: [0, 2, 2] };
+  var minPlayers = { ffa: [4, 0, 0], duel: [2, 0, 0], ca: [0, 2, 2], ctf: [0, 2, 2], tdm: [0, 2, 2], ft: [0, 2, 2] };
   for (var i = 0; i <= 2; i++) {
     var min = minPlayers[gt][i];
     if (playerCounts[i] < min) {
