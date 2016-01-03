@@ -386,7 +386,7 @@ function extractDataFromGameObject(game) {
 
       var pd = playerData[p.STEAM_ID];
       if (!pd) {
-        pd = { id: p.STEAM_ID, name: p.NAME, timeRed: 0, timeBlue: 0, score: 0, k: 0, d: 0, dg: 0, dt: 0, win: false };
+        pd = { id: p.STEAM_ID, name: p.NAME, timeRed: 0, timeBlue: 0, score: 0, k: 0, d: 0, dg: 0, dt: 0, a: 0, win: false };
         playerData[p.STEAM_ID] = pd;
       }
 
@@ -404,6 +404,7 @@ function extractDataFromGameObject(game) {
       pd.dt += p.DAMAGE.TAKEN;
       pd.k += p.KILLS;
       pd.d += p.DEATHS;
+      pd.a += p.MEDALS.ASSISTS;
       if (p.RANK == 1)
         pd.win = true;
       isTeamGame |= p.hasOwnProperty("TEAM");
@@ -461,7 +462,7 @@ function calcPlayerPerformance(p, raw) {
 
   // CTF score formula inspired by http://bot.xurv.org/rating.pdf
   if (gametype == "ctf")
-    return (p.dt == 0 ? 2 : Math.min(2, Math.max(0.5, p.dg / p.dt))) * (p.score + p.dg / 20) * timeFactor + (p.win ? 300 : 0);
+    return (p.dt == 0 ? 2 : Math.min(2, Math.max(0.5, p.dg / p.dt))) * (p.score + p.dg / 20) * timeFactor; // + (p.win ? 300 : 0);
 
   // TDM performance formula inspired by http://qlstats.info/about-ql-statistics.html
   if (gametype == "tdm")
@@ -472,7 +473,11 @@ function calcPlayerPerformance(p, raw) {
 
   // TODO: derive number of rounds a player played from the ZMQ events and add it to the player results
   // then use score/rounds for CA
+  if (gametype == "ca")
+    return p.dg / 100 * timeFactor;
 
+  if (gametype == "ft")
+    return (p.dg / 100 + p.a) * timeFactor;
 
   // FFA, FT: score/time
   return p.score * timeFactor;
