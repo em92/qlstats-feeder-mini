@@ -73,7 +73,7 @@ function init(config, app, feeder) {
   });
 
   app.get("/api/server/:addr/players", function(req, res) {
-    Q(getServerPlayers(req))
+    Q(getServerPlayers(req, res))
       .then(function(obj) { res.json(obj); })
       .catch(function(err) { res.json({ ok: false, msg: "internal error: " + err }); })
       .finally(function() { res.end(); });
@@ -128,7 +128,8 @@ function queryJson(req) {
     });
 }
 
-function getServerPlayers(req) {
+function getServerPlayers(req, res) {
+  res.set("Access-Control-Allow-Origin", "*");
   var addr = req.params.addr;
   if (!addr) return { ok: false, msg: "No server address specified" };
 
