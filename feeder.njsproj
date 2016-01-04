@@ -6,7 +6,7 @@
     <ProjectGuid>{e8a8d291-9163-4cde-9ac1-b01e406db719}</ProjectGuid>
     <ProjectHome />
     <ProjectView>ShowAllFiles</ProjectView>
-    <StartupFile>feeder.node.js</StartupFile>
+    <StartupFile>rerun-glicko.node.js</StartupFile>
     <WorkingDirectory>.</WorkingDirectory>
     <OutputPath>.</OutputPath>
     <ProjectTypeGuids>{3AF33F2E-1136-4D97-BBB7-1795711AC8B8};{349c5851-65df-11da-9384-00065b846f21};{9092AA53-FB77-4645-B42D-1CCCA6BD08BD}</ProjectTypeGuids>
@@ -18,7 +18,7 @@
     <NodeExeArguments>
     </NodeExeArguments>
     <StartWebBrowser>True</StartWebBrowser>
-    <ScriptArguments>-c cfg2.json</ScriptArguments>
+    <ScriptArguments>-f ctf</ScriptArguments>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)' == 'Debug'" />
   <PropertyGroup Condition="'$(Configuration)' == 'Release'" />
@@ -44,13 +44,18 @@
     <Compile Include="modules\webadmin.js" />
     <Compile Include="modules\webapi.js" />
     <Content Include="htdocs\servers.html" />
-    <Content Include="sample-data\matchreport.json" />
+    <Content Include="sample-data\combined_stats_ctf.json" />
+    <Content Include="sample-data\combined_stats_ft.json" />
+    <Content Include="sample-data\match_report.json" />
+    <Content Include="sample-data\match_started.json" />
     <Content Include="sample-data\playerstats1.json" />
     <Content Include="sample-data\playerstats2.json" />
     <Content Include="sample-data\player_connect.json" />
     <Content Include="sample-data\player_death.json" />
+    <Content Include="sample-data\player_disconnect.json" />
     <Content Include="sample-data\player_kill.json" />
     <Content Include="sample-data\player_medal.json" />
+    <Content Include="sample-data\player_stats.json" />
     <Content Include="sample-data\player_switchteam.json" />
     <Content Include="sample-data\round_over.json" />
     <TypeScriptCompile Include="typings\express\express.d.ts" />

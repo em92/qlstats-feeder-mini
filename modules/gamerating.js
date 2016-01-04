@@ -162,16 +162,15 @@ function resetRatingsInDb(cli) {
   if (!resetRating || !updateDatabase)
     return Q();
 
-  return Q
-    .ninvoke(cli, "query", "update player_elos set g2_games=0, g2_r=0, g2_rd=0, g2_dt=null where game_type_cd=$1", [gametype])
+  var factories = "'" + strategy.validFactories.join("','") + "'";
+  return Q()
+    .then(function() { return Q.ninvoke(cli, "query", "update player_elos set g2_games=0, g2_r=0, g2_rd=0, g2_dt=null where game_type_cd=$1", [gametype]) })
     .then(function() { return Q.ninvoke(cli, "query", "update player_game_stats pgs set g2_score=null, g2_delta_r=null, g2_delta_rd=null from games g where pgs.game_id=g.game_id and g.game_type_cd=$1", [gametype]) })
-    .then(function() { return Q.ninvoke(cli, "query", "update games set g2_status=$2 where game_type_cd=$1 and g2_status<>$3", [gametype, ERR_NOTRATEDYET, ERR_DATAFILEMISSING]) });
+    .then(function() { return Q.ninvoke(cli, "query", "update games set g2_status=$2 where game_type_cd=$1 and g2_status<>$3", [gametype, ERR_NOTRATEDYET, ERR_DATAFILEMISSING]) })
+    .then(function() { return Q.ninvoke(cli, "query", "update games set g2_status=$2 where game_type_cd=$1 and mod not in (" + factories + ")", [gametype, ERR_FACTORY_OR_SETTINGS]) });
 }
 
 function loadPlayers(cli, steamIds) {
-  if (resetRating)
-    return Q();
-
   var query = "select h.hashkey, p.player_id, p.nick, pe.g2_r, pe.g2_rd, pe.g2_dt, pe.g2_games "
     + " from hashkeys h"
     + " inner join players p on p.player_id=h.player_id"
@@ -192,7 +191,7 @@ function loadPlayers(cli, steamIds) {
     .then(function(result) {
       _logger.debug("loaded " + result.rows.length + " players");
       result.rows.forEach(function(row) {
-        var player = getOrAddPlayer(row.player_id, row.hashkey, row.nick, row.g2_r, row.g2_rd, glickoPeriod(row.g2_dt));
+        var player = getOrAddPlayer(row.player_id, row.hashkey, row.nick, resetRating ? 0 : row.g2_r, resetRating ? 0 : row.g2_rd, resetRating ? 0 : glickoPeriod(row.g2_dt));
         player.games = row.g2_games;
         player.mustSave = false;
       });
@@ -200,7 +199,7 @@ function loadPlayers(cli, steamIds) {
 }
 
 function getMatchIds(cli) {
-  var cond = resetRating ? "" : " and g2_status=0";
+  var cond = resetRating ? "" : " and g2_status=" + ERR_NOTRATEDYET;
   cond += " and (" + (onlyProcessMatchesBefore ? 1 : 0) + "=0 or start_dt<$1)";
 
   return Q.ninvoke(cli, "query",
@@ -244,7 +243,7 @@ function reprocessMatch(cli, matchId, date, gameId) {
   var file = null;
   for (var i = 0; i < subfolders.length; i++) {
     try {
-      file = __dirname + "/" + _config.feeder.jsondir + subfolders[i] + matchId + ".json.gz";
+      file = __dirname + "/../" + _config.feeder.jsondir + subfolders[i] + matchId + ".json.gz";
       var stat = fs.statSync(file);
       if (stat && stat.isFile())
         break;
@@ -253,6 +252,8 @@ function reprocessMatch(cli, matchId, date, gameId) {
     }
     file = null;
   }
+  
+  _lastProcessedMatchStartDt = date;
 
   if (file) {
     return processFile(cli, gameId, file)
@@ -352,8 +353,6 @@ function processGame(cli, gameId, game) {
 }
 
 function extractDataFromGameObject(game) {
-  _lastProcessedMatchStartDt = game.gameEndTimestamp;
-
   if (game.matchStats.ABORTED) return ERR_ABORTED;
   if (!strategy.validateGame(game)) return ERR_ROUND_OR_TIMELIMIT;
   if (game.matchStats.INSTAGIB) return ERR_FACTORY_OR_SETTINGS;
@@ -473,11 +472,11 @@ function calcPlayerPerformance(p, raw) {
 
   // TODO: derive number of rounds a player played from the ZMQ events and add it to the player results
   // then use score/rounds for CA
-  if (gametype == "ca")
-    return p.dg / 100 * timeFactor;
+  //if (gametype == "ca")
+  //  return (p.dg / 100 * + 0.25*p.k) * timeFactor;
 
   if (gametype == "ft")
-    return (p.dg / 100 + p.a) * timeFactor;
+    return (p.dg / 100 + 0.5*(p.k - p.d) + 2*p.a) * timeFactor;
 
   // FFA, FT: score/time
   return p.score * timeFactor;
@@ -528,7 +527,7 @@ function savePlayerRatings(cli) {
     .then(function() {
       // reprocessing could have taken quite a long time and new matches could have been added with incorrect ratings, so mark the new games as NOT_RATED_YET
       if (resetRating) {
-        var val = [gametype, ERR_NOTRATEDYET, ERR_DATAFILEMISSING, new Date(_lastProcessedMatchStartDt)];
+        var val = [gametype, ERR_NOTRATEDYET, ERR_DATAFILEMISSING, _lastProcessedMatchStartDt];
         return Q.ninvoke(cli, "query", "update games set g2_status=$2 where game_type_cd=$1 and g2_status<>$3 and start_dt>$4", val);
       }
       return Q();

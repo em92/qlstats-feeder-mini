@@ -27,7 +27,9 @@ function main() {
         .then(function() { return rating.rateAllGames(gt, opt); })
         .then(function() { _logger.info("-- finished " + gt + "--"); });
     }, Q())
-    .done(function() { process.exit(0); });
+    .done(function() {
+      process.exit(0);
+    });
 }
 
 function parseCommandLine() {
