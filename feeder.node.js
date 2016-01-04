@@ -30,7 +30,7 @@
 
 "use strict";
 
-const
+var
   fs = require("graceful-fs"),
   request = require("request"),
   log4js = require("log4js"),
@@ -40,7 +40,7 @@ const
   http = require("http"),
   StatsConnection = require("./modules/statsconn");
 
-const IpPortPassRegex = /^(?:([^:]*):)?((?:[0-9]{1,3}\.){3}[0-9]{1,3}):([0-9]+)(?:\/(.*))?$/; // IP:port/pass
+var IpPortPassRegex = /^(?:([^:]*):)?((?:[0-9]{1,3}\.){3}[0-9]{1,3}):([0-9]+)(?:\/(.*))?$/; // IP:port/pass
 
 var __dirname; // current working directory (defined by node.js)
 
