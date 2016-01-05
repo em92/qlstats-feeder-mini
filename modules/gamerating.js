@@ -496,7 +496,7 @@ function calcPlayerPerformance(p, raw) {
 
   // then use score/rounds for CA
   if (gametype == "ca")
-    return (p.dg / 100 * + 0.25*p.k) * timeFactor;
+    return (p.dg / 100 + 0.25*p.k) * timeFactor;
 
   if (gametype == "ft")
     return (p.dg / 100 + 0.5*(p.k - p.d) + 2*p.a) * timeFactor;
