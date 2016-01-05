@@ -18,7 +18,7 @@
     <NodeExeArguments>
     </NodeExeArguments>
     <StartWebBrowser>True</StartWebBrowser>
-    <ScriptArguments>-c cfg2.json</ScriptArguments>
+    <ScriptArguments>-c cfg2.json sample-data\combined_stats_ca_2.0.json</ScriptArguments>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)' == 'Debug'" />
   <PropertyGroup Condition="'$(Configuration)' == 'Release'" />

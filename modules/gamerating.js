@@ -142,7 +142,7 @@ function createGameTypeStrategy(gametype) {
     validFactories: ValidFactoriesForGametype[gametype],
     minPlayers: MinRequiredPlayersForGametype[gametype],
     validateGame: ValidateMatchForGametype[gametype],
-    maxTeamTimeDiff: 10 * 60,
+    maxTeamTimeDiff: 1.05, // in a 4on4 game with 10 mins (or rounds) it will allow up to 42 player minutes in one team
     isDraw: IsDrawForGametype[gametype]
   }
 }
@@ -366,12 +366,16 @@ function extractDataFromGameObject(game) {
   // aggregate total time, damage and score of player during a match (could have been switching teams)
   var playerData = {}
   var botmatch = false;
-  var timeRed = 0, timeBlue = 0, isTeamGame;
+  var timeRed = 0, timeBlue = 0, isTeamGame, roundsRed, roundsBlue;
   aggregateTimeAndScorePerPlayer();
 
   if (botmatch)
     return ERR_BOTMATCH;
-  if (timeBlue != 0 && Math.abs(timeRed - timeBlue) > strategy.maxTeamTimeDiff)
+  if (game.roundCount) {
+    if (roundsBlue != 0 && (roundsRed / roundsBlue > strategy.maxTeamTimeDiff || roundsBlue / roundsRed > strategy.maxTeamTimeDiff))
+      return ERR_TEAMTIMEDIFF;    
+  }
+  else if (timeBlue != 0 && (timeRed/timeBlue > strategy.maxTeamTimeDiff || timeBlue/timeRed > strategy.maxTeamTimeDiff))
     return ERR_TEAMTIMEDIFF;
 
   var players = calculatePlayerRanking();
@@ -387,7 +391,7 @@ function extractDataFromGameObject(game) {
 
       var pd = playerData[p.STEAM_ID];
       if (!pd) {
-        pd = { id: p.STEAM_ID, name: p.NAME, timeRed: 0, timeBlue: 0, score: 0, k: 0, d: 0, dg: 0, dt: 0, a: 0, win: false };
+        pd = { id: p.STEAM_ID, name: p.NAME, timeRed: 0, timeBlue: 0, roundsRed: 0, roundsBlue: 0, score: 0, k: 0, d: 0, dg: 0, dt: 0, a: 0, win: false };
         playerData[p.STEAM_ID] = pd;
       }
 
@@ -395,10 +399,14 @@ function extractDataFromGameObject(game) {
       if (p.TEAM == 2) {
         timeBlue += time;
         pd.timeBlue += time;
+        if (game.roundCount && game.roundCount.players[p.STEAM_ID])
+          roundsRed += pd.roundsBlue = game.roundCount.players[p.STEAM_ID].b; // don't aggregate round counts, they already are totals
       }
       else {
         timeRed += time;
         pd.timeRed += time;
+        if (game.roundCount && game.roundCount.players[p.STEAM_ID])
+          roundsBlue += pd.roundsRed = game.roundCount.players[p.STEAM_ID].r; // don't aggregate round counts, they already are totals
       }
       pd.score += p.SCORE;
       pd.dg += p.DAMAGE.DEALT;
@@ -417,8 +425,16 @@ function extractDataFromGameObject(game) {
     for (var steamId in playerData) {
       if (!playerData.hasOwnProperty(steamId)) continue;
       var pd = playerData[steamId];
-      if (pd.timeRed + pd.timeBlue < game.matchStats.GAME_LENGTH / 2) // minumum 50% participation
+
+      if (game.roundCount) {
+        // min. 50% round participation
+        if (pd.roundsRed + pd.roundsBlue < game.roundCount.total / 2)
+          continue;
+      }
+      else if (pd.timeRed + pd.timeBlue < game.matchStats.GAME_LENGTH / 2) {
+        // minumum 50% time participation
         continue;
+      }
       if (pd.dg < 500 || pd.dt / pd.dg >= 10.0) // skip AFK players
         continue;
 
@@ -431,7 +447,8 @@ function extractDataFromGameObject(game) {
       }
 
       var rankingScore = calcPlayerPerformance(pd, game);
-      players.push({ id: pd.id, score: rankingScore, win: pd.win });
+      if (rankingScore != NaN)
+        players.push({ id: pd.id, score: rankingScore, win: pd.win });
     }
     return players;
   }
@@ -460,6 +477,11 @@ function getPlayerId(cli, player) {
 
 function calcPlayerPerformance(p, raw) {
   var timeFactor = raw.matchStats.GAME_LENGTH / (p.timeRed + p.timeBlue);
+  if (raw.roundCount) {
+    var pr = raw.roundCount.players[p.id];
+    if (!pr) return NaN;
+    timeFactor = raw.roundCount.total / (pr.r + pr.b);
+  }
 
   // CTF score formula inspired by http://bot.xurv.org/rating.pdf
   if (gametype == "ctf")
@@ -472,10 +494,9 @@ function calcPlayerPerformance(p, raw) {
   if (gametype == "duel")
     return p.score;
 
-  // TODO: derive number of rounds a player played from the ZMQ events and add it to the player results
   // then use score/rounds for CA
-  //if (gametype == "ca")
-  //  return (p.dg / 100 * + 0.25*p.k) * timeFactor;
+  if (gametype == "ca")
+    return (p.dg / 100 * + 0.25*p.k) * timeFactor;
 
   if (gametype == "ft")
     return (p.dg / 100 + 0.5*(p.k - p.d) + 2*p.a) * timeFactor;

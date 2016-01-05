@@ -300,7 +300,9 @@ function processJsonFiles(files) {
           .then(function(content) { return file.slice(-3) == ".gz" ? Q.nfcall(zlib.gunzip, content) : content; })
           .then(function(json) {
             var gameData;
-            try { gameData = JSON.parse(json); }
+            try {
+              gameData = JSON.parse(json);
+            }
             catch (err) {
               if (_deleteBrokenFiles)
                 return Q.nfcall(fs.unlink, file).then(Q());
@@ -317,7 +319,8 @@ function processJsonFiles(files) {
             _logger.error(file.replace(__dirname + "/" + _config.feeder.jsondir, "") + ": " + err);
             return false;
           });
-      });
+      })
+      .catch(function(err) { _logger.error("failed to process " + file + ": " + err) });
   }
 }
 
@@ -437,8 +440,8 @@ function removeServer(conn) {
  * Callback function for events on ZeroMQ connections
  */
 function onZmqMessageCallback(conn, data) {
-  var msg = data.toString(); 
-  var obj = JSON.parse(msg); 
+  var msg = data.toString();
+  var obj = JSON.parse(msg);
   _logger.trace(conn.addr + ": received ZMQ message: " + msg);
 
   //fs.writeFileSync("temp/" + obj.TYPE.toLowerCase() + ".json", msg);
@@ -447,7 +450,9 @@ function onZmqMessageCallback(conn, data) {
     setPlayerTeam(conn, obj.DATA, 3);
   }
   else if (obj.TYPE == "PLAYER_DISCONNECT") {
-    delete conn.players[obj.DATA.STEAM_ID];
+    var p = conn.players[obj.DATA.STEAM_ID];
+    if (p)
+      p.quit = true;
   }
   else if (obj.TYPE == "PLAYER_SWITCHTEAM") {
     setPlayerTeam(conn, obj.DATA.KILLER);
@@ -461,11 +466,16 @@ function onZmqMessageCallback(conn, data) {
     var now = new Date().getTime();
     conn.matchStartTime = now;
     conn.gameType = (obj.DATA.GAME_TYPE || "").toLowerCase() || null;
-    Object.keys(conn.players).forEach(function(k) { conn.players[k].time = now; });
+    Object.keys(conn.players).forEach(function(steamid) {
+      conn.players[steamid].time = now;
+      conn.players[steamid].rounds = {};
+    });
     conn.round = 1;
+    conn.roundTimer = setTimeout(function() { roundSnapshot(conn) }, 10 * 1000); // "prepare to fight! round begins in: 10 ... 3, 2, 1, FIGHT!"
   }
   else if (obj.TYPE == "ROUND_OVER") {
     ++conn.round;
+    conn.roundTimer = setTimeout(function() { roundSnapshot(conn) }, 14 * 1000); // "red won the round! round begins in: 10 ... 3, 2, 1, FIGHT!"
   }
   else if (obj.TYPE == "PLAYER_STATS") {
     if (!obj.DATA.WARMUP)
@@ -473,12 +483,14 @@ function onZmqMessageCallback(conn, data) {
   }
   else if (obj.TYPE == "MATCH_REPORT") {
     _logger.debug(conn.addr + ": match finished");
+    clearTimeout(conn.roundTimer);
     var stats = {
       serverIp: conn.ip,
       serverPort: conn.port,
       gameEndTimestamp: Math.round(new Date().getTime() / 1000),
       matchStats: obj.DATA,
-      playerStats: conn.playerStats
+      playerStats: conn.playerStats,
+      roundCount: getRoundsInformation(conn)
     };
     conn.playerStats = [];
     //conn.players = {};
@@ -500,11 +512,46 @@ function onZmqMessageCallback(conn, data) {
     var steamid = playerData.STEAM_ID;
     var player = conn.players[steamid];
     if (!player)
-      conn.players[steamid] = player = { team: -1, time: new Date().getTime() };
+      conn.players[steamid] = player = { team: -1, time: new Date().getTime(), rounds: {}, quit: false };
     var teams = [0, "0", "FREE", 1, "1", "RED", 2, "2", "BLUE", 3, "3", "SPECTATOR"];
     var team = overrideTeam !== undefined ? overrideTeam : playerData.TEAM;
     player.team = Math.floor(teams.indexOf(team) / 3);
     player.name = playerData.NAME;
+    player.quit = false;
+  }
+
+  function roundSnapshot(conn) {
+    Object.keys(conn.players).forEach(function(steamid) {
+      var p = conn.players[steamid];
+      if ((p.team == 1 || p.team == 2) && !p.quit)
+        p.rounds[conn.round] = p.team;
+    });
+  }
+
+  function getRoundsInformation(conn) {
+    if (!(conn.matchStartTime && conn.round > 1))
+      return undefined;
+    var playerRounds = Object.keys(conn.players).reduce(function(aggregate, steamid) {
+      var p = conn.players[steamid];
+      var rounds = p.rounds;
+      var count = { r: 0, b: 0 };
+      for (var round in rounds) {
+        if (!rounds.hasOwnProperty(round)) continue;
+        if (rounds[round] == 2)
+          ++count.b;
+        else
+          ++count.r;
+      }
+
+      if (count.r || count.b)
+        aggregate[steamid] = count;
+
+      if (p.quit)
+        delete conn.players[steamid];
+
+      return aggregate;
+    }, {});
+    return { total: conn.round - 1, players: playerRounds };
   }
 }
 
@@ -622,6 +669,8 @@ function createXonstatMatchReport(gt, game) {
   function exportMatchInformation(gt, game, report) {
     report.push("0 " + game.serverIp); // not XonStat standard
     report.push("1 " + game.gameEndTimestamp); // not XonStat standard
+    if (game.roundCount)
+      report.push("2 " + game.roundCount.total);
     report.push("S " + game.matchStats.SERVER_TITLE);
     report.push("I " + game.matchStats.MATCH_GUID);
     report.push("G " + gt);
@@ -657,6 +706,12 @@ function createXonstatMatchReport(gt, game) {
       if ((team == 0 && p.RANK == "1") || isWinnerTeam)
         report.push("e wins 1");
       report.push("e scoreboardpos " + p.RANK);
+      if (game.roundCount) {
+        var rounds = game.roundCount.players[p.STEAM_ID];
+        if (rounds)
+          report.push("e scoreboard-lives " + (p.TEAM == 1 ? rounds.r : rounds.b));
+      }
+        
       
       mapFields(p, playerMapping, report);
       mapFields(p.DAMAGE, damageMapping, report);
@@ -733,3 +788,4 @@ function postMatchReportToXonstat(addr, game, report) {
 }
 
 main();
+//process.exit(0);
