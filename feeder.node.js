@@ -5,8 +5,9 @@
  - save the stats to .json.gz files
  - load saved .json.gz stats files for reprocessing
  - transform the stats JSON to XonStat match report format and HTTP POST it to sumbission.py, which will insert it in the database
- - run an HTTP server with an administration panel to add/modify the game server list
- - run an HTTP server with API URLs to query and deliver saved .json.gz files
+ - send match data to the glicko gamerating module
+ - run an HTTP server with an administration panel to monitor/add/modify the game server list
+ - run an HTTP server with API URLs to query and deliver saved .json.gz files and get some live match information
  
  The script monitors changes to the config file and automatically connects to added servers and disconnects from removed servers.
 
@@ -493,19 +494,21 @@ function onZmqMessageCallback(conn, data) {
       roundCount: getRoundsInformation(conn)
     };
     conn.playerStats = [];
-    //conn.players = {};
+    Object.keys(conn.players).forEach(function(steamid) {
+      if (conn.players[steamid].quit)
+        delete conn.players[steamid];
+    }); 
+
     //conn.gameType = null;  // assume it will stay the same, since QL doesn't provide any timely update after map change
     conn.matchStartTime = 0;
 
     // save .json.gz and/or process the data for uploading it to xonstatdb
     var tasks = [];
     if (_config.feeder.saveDownloadedJson)
-      tasks.push(saveGameJson(stats));
+      tasks.push(saveGameJson(stats).catch(function (err) { _logger.error("failed saving .json.gz: " + err) }));
     if (_config.feeder.importDownloadedJson)
-      tasks.push(processGameData(stats));
-    Q
-      .allSettled(tasks)
-      .catch(function(err) { _logger.error(err.stack); });
+      tasks.push(processGameData(stats).catch(function (err) { _logger.error("failed saving .json.gz: " + err) }));
+    Q.allSettled(tasks);
   }
 
   function setPlayerTeam(conn, playerData, overrideTeam) {
@@ -545,9 +548,6 @@ function onZmqMessageCallback(conn, data) {
 
       if (count.r || count.b)
         aggregate[steamid] = count;
-
-      if (p.quit)
-        delete conn.players[steamid];
 
       return aggregate;
     }, {});
@@ -600,13 +600,13 @@ function processGameData(game) {
 
   if (game.matchStats.ABORTED) {
     _logger.debug(addr + ": ignoring aborted game " + game.matchStats.MATCH_GUID);
-    return false;
+    return Q(false);
   }
 
   var gt = game.matchStats.GAME_TYPE.toLowerCase();
   if (",ffa,duel,ca,tdm,ctf,ft,".indexOf("," + gt + ",") < 0) {
     _logger.debug(addr + ": unsupported game type: " + gt);
-    return false;
+    return Q(false);
   }
 
   // verify minimum number of players in each team (this is for saving stats, ranking has additional requirements)
@@ -619,7 +619,7 @@ function processGameData(game) {
     var min = minPlayers[gt][i];
     if (playerCounts[i] < min) {
       _logger.debug("only " + playerCounts[i] + " player(s) in team " + i + ", minimum required is " + min);
-      return false;
+      return Q(false);
     }
   }
 

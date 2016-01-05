@@ -139,18 +139,20 @@ function getServerPlayers(req, res) {
       if (!status) return { ok: false, msg: "Server is not being tracked" };
 
       var keys = status.p ? Object.keys(status.p) : [];
-      var players = keys.map(function(steamid) {
+      var players = keys.reduce(function(result, steamid) {
         var player = status.p[steamid];
-        var gt = status.gt || _getServerGametypeCache[addr];
-        var getRating = gt ? Q(getSkillRatings()).then(function(ratings) {
-           return ratings[steamid] ? ratings[steamid][gt] : undefined;
-        }) : Q(undefined);
-        return getRating.then(function(rating) { return { steamid: steamid, name: player.name, team: player.team, rating: rating, time: player.time } });
-      });
+        if (!player.quit) {
+          var gt = status.gt || _getServerGametypeCache[addr];
+          var getRating = gt ? Q(getSkillRatings()).then(function(ratings) {
+            return ratings[steamid] ? ratings[steamid][gt] : undefined;
+          }) : Q(undefined);
+          result.push(getRating.then(function(rating) { return { steamid: steamid, name: player.name, team: player.team, rating: rating, time: player.time } }));
+        }
+        return result;
+      }, []);
       return Q.all(players).then(function(results) {
         return { ok: true, players: results };
       });
-
     });
 }
 
@@ -219,7 +221,7 @@ function getServerSkillrating() {
       var count = 0;
       Object.keys(conn.p).reduce(function(prev, steamid) {
         var player = conn.p[steamid];
-        if (player.team < 0 || player.team >= 3) return;
+        if (player.team < 0 || player.team >= 3 || player.quit) return;
         var playerRating = skillInfo[steamid];
         var rating = playerRating ? playerRating[gt] : null;
         if (!rating) return;
