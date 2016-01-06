@@ -59,7 +59,7 @@ var _statsConnections = {}; // dictionary with IP:port => StatsConnection
 
 function main() {
   _logger = log4js.getLogger("feeder");
-  Q.longStackSupport = false; // enable if you have to trace a problem, but it has a HUGE performance penalty
+  //Q.longStackSupport = true; // enable if you have to trace a problem, but it has a HUGE performance penalty
   StatsConnection.setLogger(_logger);
   
   var filesToProcess = parseCommandLine();

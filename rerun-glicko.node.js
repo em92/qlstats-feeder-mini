@@ -22,6 +22,7 @@ function main() {
       var opt = options[cmd.mode];
       if (typeof (opt.printResult) != "undefined")
         opt.printResult = cmd.printResult;
+      opt.funMods = cmd.funMods;
       return chain
         .then(function() { _logger.info("-- starting " + gt + "--"); })
         .then(function() { return rating.rateAllGames(gt, opt); })
@@ -36,6 +37,7 @@ function parseCommandLine() {
   var gametypes = [];
   var mode = "incremental";
   var print = undefined;
+  var funMods = false;
 
   var args = process.argv.slice(2);
   while (args.length > 0) {
@@ -51,6 +53,10 @@ function parseCommandLine() {
       gametypes = ["ctf", "tdm", "ft", "ffa", "ca", "duel"];
     else if (args[0] == "-r")
       print = true;
+    else if (args[0] == "-u")
+      funMods = true;
+    else if (args[0] == "-c")
+      args = args.slice(1);
     else if (args[0][0] == "-") {
       console.log("Unsupported option: " + args[0]);
       process.exit(1);
@@ -66,7 +72,7 @@ function parseCommandLine() {
     process.exit(1);
   }
 
-  return { gametypes: gametypes, mode: mode, printResult: print };
+  return { gametypes: gametypes, mode: mode, printResult: print, funMods: funMods };
 }
 
 main();
