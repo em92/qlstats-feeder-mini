@@ -143,7 +143,8 @@ function getServerPlayers(req, res) {
         var player = status.p[steamid];
         if (!player.quit) {
           var gt = status.gt || _getServerGametypeCache[addr];
-          var getRating = gt ? Q(getSkillRatings()).then(function(ratings) {
+          var getRating = gt ? Q(getSkillRatings()).then(function (ratings) {
+
             return ratings[steamid] ? ratings[steamid][gt] : undefined;
           }) : Q(undefined);
           result.push(getRating.then(function(rating) { return { steamid: steamid, name: player.name, team: player.team, rating: rating, time: player.time } }));
@@ -168,7 +169,7 @@ function getServerStatusdump(req) {
   addrs.forEach(function(addr) {
     var conn = conns[addr];
     if (!conn.connected) return;
-    info[addr] = { gt: conn.gameType, p: conn.players };
+    info[addr] = { gt: conn.gameType, f: conn.factory, p: conn.players };
   });
   return info;
 }

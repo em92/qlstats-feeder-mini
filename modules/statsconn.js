@@ -44,6 +44,7 @@ function StatsConnection(owner, ip, port, pass, onZmqMessageCallback) {
   // stuff for the webapi
   this.players = {};
   this.gameType = null;
+  this.factory = null;
   this.round = 0;
 }
 

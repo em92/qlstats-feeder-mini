@@ -467,6 +467,7 @@ function onZmqMessageCallback(conn, data) {
     var now = new Date().getTime();
     conn.matchStartTime = now;
     conn.gameType = (obj.DATA.GAME_TYPE || "").toLowerCase() || null;
+    conn.factory = (obj.DATA.FACTORY || "").toLowerCase() || null;
     Object.keys(conn.players).forEach(function(steamid) {
       conn.players[steamid].time = now;
       conn.players[steamid].rounds = {};

@@ -29,6 +29,7 @@ var onlyProcessMatchesBefore;
 var printResult;
 var gametype;
 var funMods;
+var recalcFactories;
 var strategy;
 var playersBySteamId = {};
 var _lastProcessedMatchStartDt;
@@ -166,19 +167,20 @@ function resetRatingsInDb(cli) {
   if (!resetRating || !updateDatabase)
     return Q();
 
-  var factories = "'" + strategy.validFactories.join("','") + "'";
+  _logger.info("resetting ratings in database");
+  recalcFactories = "'" + strategy.validFactories.join("','") + "'";
   if (funMods) {
     return Q()
       .then(function () { return Q.ninvoke(cli, "query", "update player_elos set b_games=0, b_r=0, b_rd=0, b_dt=null where game_type_cd=$1", [gametype]) })
       .then(function () { return Q.ninvoke(cli, "query", "update player_game_stats pgs set g2_score=null, g2_delta_r=null, g2_delta_rd=null from games g where pgs.game_id=g.game_id and g.game_type_cd=$1 and g2_status=$2", [gametype, ERR_FACTORY_OR_SETTINGS]) })
-      .then(function () { return Q.ninvoke(cli, "query", "update games set g2_status=$2 where game_type_cd=$1 and mod in (" + factories + ") and g2_status<>$3", [gametype, ERR_NOTRATEDYET, ERR_DATAFILEMISSING]) });
+      .then(function () { return Q.ninvoke(cli, "query", "update games set g2_status=$2 where game_type_cd=$1 and mod not in (" + recalcFactories + ") and g2_status<>$3", [gametype, ERR_NOTRATEDYET, ERR_DATAFILEMISSING]) });
   }
   else {
     return Q()
       .then(function() { return Q.ninvoke(cli, "query", "update player_elos set g2_games=0, g2_r=0, g2_rd=0, g2_dt=null where game_type_cd=$1", [gametype]) })
-      .then(function() { return Q.ninvoke(cli, "query", "update player_game_stats pgs set g2_score=null, g2_delta_r=null, g2_delta_rd=null from games g where pgs.game_id=g.game_id and g.game_type_cd=$1", [gametype]) })
+      .then(function() { return Q.ninvoke(cli, "query", "update player_game_stats pgs set g2_score=null, g2_delta_r=null, g2_delta_rd=null from games g where pgs.game_id=g.game_id and g.game_type_cd=$1 and g.mod in (" + recalcFactories + ")", [gametype]) })
       .then(function() { return Q.ninvoke(cli, "query", "update games set g2_status=$2 where game_type_cd=$1 and g2_status<>$3", [gametype, ERR_NOTRATEDYET, ERR_DATAFILEMISSING]) })
-      .then(function() { return Q.ninvoke(cli, "query", "update games set g2_status=$2 where game_type_cd=$1 and mod not in (" + factories + ")", [gametype, ERR_FACTORY_OR_SETTINGS]) });
+      .then(function() { return Q.ninvoke(cli, "query", "update games set g2_status=$2 where game_type_cd=$1 and mod not in (" + recalcFactories + ") and g2_status<>$3", [gametype, ERR_FACTORY_OR_SETTINGS, ERR_DATAFILEMISSING]) });
   }
 }
 
@@ -215,9 +217,13 @@ function getMatchIds(cli) {
   cond += " and (" + (onlyProcessMatchesBefore ? 1 : 0) + "=0 or start_dt<$1)";
 
   return Q.ninvoke(cli, "query",
-      "select match_id, start_dt, game_id from games"
-      + " where game_type_cd='" + gametype + "' and mod " + (funMods ? "not" : "") + " in ('" + strategy.validFactories.join("','") + "')" + cond
-      + " order by start_dt", [onlyProcessMatchesBefore || new Date()])
+      "select match_id, start_dt, game_id"
+      + " from games"
+      + " where game_type_cd=$2"
+      + " and mod " + (funMods ? "not" : "") + " in ('" + strategy.validFactories.join("','") + "')" 
+      + " and g2_status<>$3"
+      + cond
+      + " order by start_dt", [onlyProcessMatchesBefore || new Date(), gametype, ERR_DATAFILEMISSING])
     .then(function(result) {
       return result.rows.map(function(row) { return { game_id: row.game_id, date: row.start_dt, match_id: row.match_id }; });
     });
@@ -236,9 +242,10 @@ function reprocessMatches(cli, matches) {
           _logger.info("processed matches: " + counter + " (" + Math.round(counter * 10000 / matches.length) / 100 + "%)");
           printProgress = false;
         }
-        ++counter;
+        var midSave = ++counter % 1000 == 0 ? savePlayerRatings(cli, funMods) : Q();
+        
         g2.setPeriod(glickoPeriod(match.date));
-        return /* ok || */ reprocessMatch(cli, match.match_id, match.date, match.game_id, currentRatingPeriod);
+        return /* ok || */ Q(midSave).then(function() { return reprocessMatch(cli, match.match_id, match.date, match.game_id, currentRatingPeriod); });
       });
     }, Q())
     .then(function() { return playersBySteamId; })
@@ -549,8 +556,10 @@ function savePlayerRatings(cli, isFunMod) {
   for (var steamId in players) {
     if (!players.hasOwnProperty(steamId)) continue;
     var player = players[steamId];
-    if (player.mustSave)
+    if (player.mustSave) {
       list.push(player);
+      player.mustSave = false;
+    }
   }
 
   var update, insert, updateName = "elo_upd", insertName = "elo_ins";
@@ -582,7 +591,8 @@ function savePlayerRatings(cli, isFunMod) {
       // reprocessing could have taken quite a long time and new matches could have been added with incorrect ratings, so mark the new games as NOT_RATED_YET
       if (resetRating) {
         var val = [gametype, ERR_NOTRATEDYET, ERR_DATAFILEMISSING, _lastProcessedMatchStartDt];
-        return Q.ninvoke(cli, "query", "update games set g2_status=$2 where game_type_cd=$1 and g2_status<>$3 and start_dt>$4", val);
+        var cond = funMods ? "not" : "";
+        return Q.ninvoke(cli, "query", "update games set g2_status=$2 where game_type_cd=$1 and g2_status<>$3 and start_dt>$4 and mod " + cond + " in (" + recalcFactories + ")", val);
       }
       return Q();
     })
