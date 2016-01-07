@@ -192,7 +192,7 @@ function loadPlayers(cli, steamIds) {
   var params = [gametype];
   
   if (steamIds) {
-    query += " and h.hashkey in ('0'";
+    query += " where h.hashkey in ('0'";
     steamIds.forEach(function(steamId, i) {
       query += ",$" + (i + 2);
       params.push(steamId);
