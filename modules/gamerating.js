@@ -83,7 +83,7 @@ function rateSingleGame(gameId, game) {
         .then(function() { return loadPlayers(cli, steamIds); })
         .then(function() { return processGame(cli, gameId, game); })
         .then(function(isFunMod) { return isFunMod === null ? Q(null) : savePlayerRatings(cli, isFunMod); })
-        .then(Q(true))
+        .then(function() { return true; })
         .finally(function() { cli.release(); });
     })
     .catch(function(err) {
@@ -283,7 +283,7 @@ function reprocessMatch(cli, matchId, date, gameId) {
   }
 
   _logger.warn("json.gz not found: " + matchId);
-  return setGameStatus(cli, gameId, ERR_DATAFILEMISSING).then(Q(false));
+  return setGameStatus(cli, gameId, ERR_DATAFILEMISSING).then(function () { return false; });
 }
 
 function getDateFolder(date, deltaDays) {
@@ -314,9 +314,11 @@ function processGame(cli, gameId, game) {
 
   // store a status code why the game was not rated
   if (typeof (result) === "number")
-    return setGameStatus(cli, gameId, result).then(Q(null));
+    return setGameStatus(cli, gameId, result).then(function() { return null; });
 
-  var isFunMod = strategy.validFactories.indexOf(game.matchStats.FACTORY) < 0;
+  var isFunMod = strategy.validFactories.indexOf(game.matchStats.FACTORY) < 0 
+    || game.matchStats.INSTAGIB;
+
 
   var playerRanking = result;
   var players = [];
@@ -344,7 +346,7 @@ function processGame(cli, gameId, game) {
 
   return (rateEachSingleMatch ? savePlayerGameRatingChange(players) : Q())
     .then(function() { return setGameStatus(cli, gameId, isFunMod ? ERR_FACTORY_OR_SETTINGS : ERR_OK) })
-    .then(Q(isFunMod));
+    .then(function() { return isFunMod });
 
   function savePlayerGameRatingChange(players) {
     return players.reduce(function(chain, p) {
@@ -358,8 +360,8 @@ function processGame(cli, gameId, game) {
               return Q();
 
             var rating = isFunMod ? p.ratingB : p.rating;
-            var val = [gameId, pid, p.score, rating.getRating() - rating.__oldR, rating.getRd() - rating.__oldRd];
-            return Q.ninvoke(cli, "query", { name: "pgs_upd", text: "update player_game_stats set g2_score=$3, g2_delta_r=$4, g2_delta_rd=$5 where game_id=$1 and player_id=$2", values: val })
+            var val = [gameId, pid, p.score, rating.__oldR, rating.__oldRd, rating.getRating() - rating.__oldR, rating.getRd() - rating.__oldRd];
+            return Q.ninvoke(cli, "query", { name: "pgs_upd", text: "update player_game_stats set g2_score=$3, g2_old_r=$4, g2_old_rd=$5, g2_delta_r=$6, g2_delta_rd=$7 where game_id=$1 and player_id=$2", values: val })
               .then(function(result) {
                 if (result.rowCount == 0)
                   _logger.warn("player_game_stats not found: gid=" + gameId + ", pid=" + pid);
@@ -373,7 +375,6 @@ function processGame(cli, gameId, game) {
 
 function extractDataFromGameObject(game) {
   if (game.matchStats.ABORTED) return ERR_ABORTED;
-  if (game.matchStats.INSTAGIB) return ERR_FACTORY_OR_SETTINGS;
   if (game.matchStats.INFECTED) return ERR_FACTORY_OR_SETTINGS;
   if (game.matchStats.QUADHOG) return ERR_FACTORY_OR_SETTINGS;
   if (game.matchStats.TRAINING) return ERR_FACTORY_OR_SETTINGS;
@@ -596,7 +597,7 @@ function savePlayerRatings(cli, isFunMod) {
       }
       return Q();
     })
-    .then(Q(players));
+    .then(function () { return players; });
 }
 
 function printResults() {
