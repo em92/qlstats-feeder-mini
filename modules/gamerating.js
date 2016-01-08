@@ -171,13 +171,13 @@ function resetRatingsInDb(cli) {
   recalcFactories = "'" + strategy.validFactories.join("','") + "'";
   if (funMods) {
     return Q()
-      .then(function () { return Q.ninvoke(cli, "query", "update player_elos set b_games=0, b_r=0, b_rd=0, b_dt=null where game_type_cd=$1", [gametype]) })
+      //.then(function () { return Q.ninvoke(cli, "query", "update player_elos set b_games=0, b_r=0, b_rd=0, b_dt=null where game_type_cd=$1", [gametype]) })
       .then(function () { return Q.ninvoke(cli, "query", "update player_game_stats pgs set g2_score=null, g2_delta_r=null, g2_delta_rd=null from games g where pgs.game_id=g.game_id and g.game_type_cd=$1 and g2_status=$2", [gametype, ERR_FACTORY_OR_SETTINGS]) })
       .then(function () { return Q.ninvoke(cli, "query", "update games set g2_status=$2 where game_type_cd=$1 and mod not in (" + recalcFactories + ") and g2_status<>$3", [gametype, ERR_NOTRATEDYET, ERR_DATAFILEMISSING]) });
   }
   else {
     return Q()
-      .then(function() { return Q.ninvoke(cli, "query", "update player_elos set g2_games=0, g2_r=0, g2_rd=0, g2_dt=null where game_type_cd=$1", [gametype]) })
+      //.then(function() { return Q.ninvoke(cli, "query", "update player_elos set g2_games=0, g2_r=0, g2_rd=0, g2_dt=null where game_type_cd=$1", [gametype]) })
       .then(function() { return Q.ninvoke(cli, "query", "update player_game_stats pgs set g2_score=null, g2_delta_r=null, g2_delta_rd=null from games g where pgs.game_id=g.game_id and g.game_type_cd=$1 and g.mod in (" + recalcFactories + ")", [gametype]) })
       .then(function() { return Q.ninvoke(cli, "query", "update games set g2_status=$2 where game_type_cd=$1 and g2_status<>$3", [gametype, ERR_NOTRATEDYET, ERR_DATAFILEMISSING]) })
       .then(function() { return Q.ninvoke(cli, "query", "update games set g2_status=$2 where game_type_cd=$1 and mod not in (" + recalcFactories + ") and g2_status<>$3", [gametype, ERR_FACTORY_OR_SETTINGS, ERR_DATAFILEMISSING]) });

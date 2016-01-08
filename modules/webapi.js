@@ -312,7 +312,7 @@ function getSkillRatings() {
       var player = info[row.hashkey];
       if (!player)
         info[row.hashkey] = player = {};
-      player[row.game_type_cd] = Math.round(row.g2_r - row.g2_rd);
+      player[row.game_type_cd] = Math.round(row.g2_r);
     });
     return info;
   }
