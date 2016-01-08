@@ -605,7 +605,7 @@ function processGameData(game) {
   }
 
   var gt = game.matchStats.GAME_TYPE.toLowerCase();
-  if (",ffa,duel,ca,tdm,ctf,ft,".indexOf("," + gt + ",") < 0) {
+  if (",ffa,duel,ca,tdm,ctf,ft,dom,ad,".indexOf("," + gt + ",") < 0) {
     _logger.debug(addr + ": unsupported game type: " + gt);
     return Q(false);
   }
@@ -625,6 +625,11 @@ function processGameData(game) {
   }
 
   var report = createXonstatMatchReport(gt, game);
+  if (!report) {
+    _logger.error(addr + ": no match report generated for " + game.matchStats.MATCH_GUID);
+    return Q(false);
+  }
+
   return postMatchReportToXonstat(addr, game, report)
     .then(function (result) {
       if (!_config.feeder.calculateGlicko)
@@ -657,14 +662,16 @@ function createXonstatMatchReport(gt, game) {
   
   if ("ffa,duel,race".indexOf(gt) >= 0)
     exportScoreboard(gt, game, 0, true, allWeapons, report);
-  else if ("ca,tdm,ctf,ft".indexOf(gt) >= 0) {
+  else if ("ca,tdm,ctf,ft,ad,dom".indexOf(gt) >= 0) {
     var redWon = parseInt(game.matchStats.TSCORE0) > parseInt(game.matchStats.TSCORE1);
     var blueWon = parseInt(game.matchStats.TSCORE0) < parseInt(game.matchStats.TSCORE1);
     exportTeamSummary(gt, game, 1, report);
     exportScoreboard(gt, game, 1, redWon, allWeapons, report);
     exportTeamSummary(gt, game, 2, report);
     exportScoreboard(gt, game, 2, blueWon, allWeapons, report);
-  } 
+  }
+  else
+    return null;
   return report.join("\n");
 
   function exportMatchInformation(gt, game, report) {
