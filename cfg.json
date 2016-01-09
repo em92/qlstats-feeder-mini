@@ -8,7 +8,8 @@
     "logLevel": "TRACE",
     "servers": [
       "yourname:127.0.0.1:27960/statspass"
-    ]
+    ],
+    "calculateGlicko": true
   },
   "httpd": {
     "port": 8081
@@ -20,6 +21,7 @@
   "webapi": {
     "enabled": true,
     "logLevel": "INFO",
-    "database": "postgres://xonstat:xonstat@localhost/xonstatdb"
+    "database": "postgres://xonstat:xonstat@localhost/xonstatdb",
+    "aggregatePanelPorts": []
   }
 }

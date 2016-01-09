@@ -19,7 +19,8 @@ const
   ERR_TEAMTIMEDIFF = 5,
   ERR_MINPLAYERS = 6,
   ERR_DATAFILEMISSING = 7,
-  ERR_FACTORY_OR_SETTINGS = 8;
+  ERR_FACTORY_OR_SETTINGS = 8,
+  ERR_UNSUPPORTED_GAME_TYPE = 9;
 
 const rateEachSingleMatch = true;
 var _config;
@@ -80,7 +81,7 @@ function rateSingleGame(gameId, game) {
   dbConnect()
     .then(function(cli) {
       return Q()
-        .then(function() { return loadPlayers(cli, steamIds); })
+        .then(function() { return strategy.isSupported ? loadPlayers(cli, steamIds) : []; })
         .then(function() { return processGame(cli, gameId, game); })
         .then(function(isFunMod) { return isFunMod === null ? Q(null) : savePlayerRatings(cli, isFunMod); })
         .then(function() { return true; })
@@ -142,11 +143,12 @@ function createGameTypeStrategy(gametype) {
   }
 
   return {
-    validFactories: ValidFactoriesForGametype[gametype],
-    minPlayers: MinRequiredPlayersForGametype[gametype],
-    validateGame: ValidateMatchForGametype[gametype],
+    isSupported: ValidFactoriesForGametype[gametype] !== undefined,
+    validFactories: ValidFactoriesForGametype[gametype] || [],
+    minPlayers: MinRequiredPlayersForGametype[gametype] || 2,
+    validateGame: ValidateMatchForGametype[gametype] || (function () { return false; }),
     maxTeamTimeDiff: 1.05, // in a 4on4 game with 10 mins (or rounds) it will allow up to 42 player minutes in one team
-    isDraw: IsDrawForGametype[gametype]
+    isDraw: IsDrawForGametype[gametype] || (function () { return false; })
   }
 }
 
@@ -374,6 +376,7 @@ function processGame(cli, gameId, game) {
 }
 
 function extractDataFromGameObject(game) {
+  if (!strategy.isSupported) return ERR_UNSUPPORTED_GAME_TYPE;
   if (game.matchStats.ABORTED) return ERR_ABORTED;
   if (game.matchStats.INFECTED) return ERR_FACTORY_OR_SETTINGS;
   if (game.matchStats.QUADHOG) return ERR_FACTORY_OR_SETTINGS;

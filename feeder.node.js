@@ -192,7 +192,7 @@ function upgradeConfigVersion() {
  * @param {string[]} files - list of files/dirs to be processed recursively
  */
 function processFilesFromCommandLine(files) {
-  processJsonFiles(files)
+  return processJsonFiles(files)
     .catch(function(err) { _logger.error(err); })
     .done();
 }
@@ -276,7 +276,9 @@ function writeConfig() {
 function processJsonFiles(files) {
   // serialize calls for each file
   return files.reduce(function(chain, file) {
-    return chain.then(function(ok) { return ok & feedJsonFile(file); }); // single & to prevent short-circuit evaluation
+    return chain.then(function (prevOk) {
+      feedJsonFile(file).then(function (ok) { return ok && prevOk; });
+    });
   }, Q(true));
 
   function feedJsonFile(file) {
@@ -588,6 +590,7 @@ function saveGameJson(game, toErrorDir) {
   }
 }
 
+
 /**
  * (re-)process game data: validate game data, transform JSON to xonstat match report text format and post it to submission.py
  * @param {Object} game - game data from onZmqMessageCallback or from a loaded .json[.gz] file
@@ -605,22 +608,28 @@ function processGameData(game) {
   }
 
   var gt = game.matchStats.GAME_TYPE.toLowerCase();
-  if (",ffa,duel,ca,tdm,ctf,ft,dom,ad,".indexOf("," + gt + ",") < 0) {
-    _logger.debug(addr + ": unsupported game type: " + gt);
-    return Q(false);
-  }
 
   // verify minimum number of players in each team (this is for saving stats, ranking has additional requirements)
   var playerCounts = game.playerStats.reduce(function(counts, player) {
     ++counts[player.TEAM || 0];
     return counts;
   }, [0, 0, 0]);
-  var minPlayers = { ffa: [4, 0, 0], duel: [2, 0, 0], ca: [0, 2, 2], ctf: [0, 2, 2], tdm: [0, 2, 2], ft: [0, 2, 2] };
-  for (var i = 0; i <= 2; i++) {
-    var min = minPlayers[gt][i];
-    if (playerCounts[i] < min) {
-      _logger.debug("only " + playerCounts[i] + " player(s) in team " + i + ", minimum required is " + min);
+  if (gt == "rr") {
+    var count = playerCounts.reduce(function(s, c) { return s + c; }, 0);
+    if (count < 4) {
+      _logger.debug("only " + count + " player(s) in match, minimum required is 4");
       return Q(false);
+    }
+  }
+  else {
+    var minPlayers = { duel: [2, 0, 0], race: [1, 0, 0] };
+    var minCounts = minPlayers[gt] || isTeamGame(gt) ? [0, 2, 2] : [4, 0, 0];
+    for (var i = 0; i <= 2; i++) {
+      var min = minCounts[i];
+      if (playerCounts[i] < min) {
+        _logger.debug("only " + playerCounts[i] + " player(s) in team " + i + ", minimum required is " + min);
+        return Q(false);
+      }
     }
   }
 
@@ -648,6 +657,10 @@ function processGameData(game) {
     });
 }
 
+function isTeamGame(gt) {
+  return ",ca,tdm,ctf,ft,ad,dom,1fctf,harvester,".indexOf("," + gt + ",") >= 0;
+}
+
 /**
  * Convert the internal game data to the XonStat match report text file format used as HTTP POST body for submission.py
  * @param {string} gt - game type (ffa, ca, duel, ctf, tdm, ft, ...)
@@ -659,10 +672,8 @@ function createXonstatMatchReport(gt, game) {
   exportMatchInformation(gt, game, report);
   
   var allWeapons = { gt: "GAUNTLET", mg: "MACHINEGUN", sg: "SHOTGUN", gl: "GRENADE", rl: "ROCKET", lg: "LIGHTNING", rg: "RAILGUN", pg: "PLASMA", bfg: "BFG", hmg: "HMG", cg: "CHAINGUN", ng: "NAILGUN", pm: "PROXMINE", gh: "OTHER_WEAPON" };
-  
-  if ("ffa,duel,race".indexOf(gt) >= 0)
-    exportScoreboard(gt, game, 0, true, allWeapons, report);
-  else if ("ca,tdm,ctf,ft,ad,dom".indexOf(gt) >= 0) {
+    
+  if (isTeamGame(gt)) {
     var redWon = parseInt(game.matchStats.TSCORE0) > parseInt(game.matchStats.TSCORE1);
     var blueWon = parseInt(game.matchStats.TSCORE0) < parseInt(game.matchStats.TSCORE1);
     exportTeamSummary(gt, game, 1, report);
@@ -671,9 +682,9 @@ function createXonstatMatchReport(gt, game) {
     exportScoreboard(gt, game, 2, blueWon, allWeapons, report);
   }
   else
-    return null;
+    exportScoreboard(gt, game, 0, true, allWeapons, report);
   return report.join("\n");
-
+  
   function exportMatchInformation(gt, game, report) {
     report.push("0 " + game.serverIp); // not XonStat standard
     report.push("1 " + game.gameEndTimestamp); // not XonStat standard

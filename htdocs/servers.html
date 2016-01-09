@@ -23,6 +23,7 @@
     #panels { float: right;display: none;font-size: small;}
     #panels span { font-size:large; }
     #panels a { color: yellow; }
+    h1>a { color: inherit;text-decoration: none;}
   </style>
 </head>
 
@@ -38,7 +39,7 @@
   <br/>If a panel is full, please use another one.
 </div>
 
-<h1>qlstats.net Game Server Admin Panel</h1>
+<h1><a id="mainSite" href="">qlstats.net</a> Game Server Admin Panel</h1>
 
 <div>
   <table style="display:inline-block">
@@ -271,6 +272,8 @@
       if (server.indexOf(':') > 0 || confirm("Are you sure that you want to delete\n" + $("#editFormTitle").text() + "?"))
         submitEditForm("delete");
     });
+
+    $("#mainSite").attr("href", "http://" + location.hostname + "/");
   }
 
   main();
