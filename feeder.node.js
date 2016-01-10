@@ -68,9 +68,11 @@ function main() {
   
   if (_reloadErrorFiles)
     return processFilesFromCommandLine([__dirname + "/" + _config.feeder.jsondir + "errors"]);
-  
-  if (filesToProcess.length > 0)
+
+  if (filesToProcess.length > 0) {
+    _logger.setLevel("DEBUG");
     return processFilesFromCommandLine(filesToProcess);
+  }
 
   if (_config.feeder.enabled !== false)
     startFeeder();
@@ -623,7 +625,7 @@ function processGameData(game) {
   }
   else {
     var minPlayers = { duel: [2, 0, 0], race: [1, 0, 0] };
-    var minCounts = minPlayers[gt] || isTeamGame(gt) ? [0, 2, 2] : [4, 0, 0];
+    var minCounts = minPlayers[gt] || (isTeamGame(gt) ? [0, 2, 2] : [4, 0, 0]);
     for (var i = 0; i <= 2; i++) {
       var min = minCounts[i];
       if (playerCounts[i] < min) {
