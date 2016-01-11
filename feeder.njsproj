@@ -25,19 +25,18 @@
   <PropertyGroup Condition="'$(Configuration)' == 'Debug'" />
   <PropertyGroup Condition="'$(Configuration)' == 'Release'" />
   <ItemGroup>
+    <Compile Include="validate-glicko.node.js" />
     <Content Include="post-data.txt" />
     <Content Include="cfg.json" />
     <Content Include="cfg2.json" />
     <Content Include="cfg_api.json" />
     <Content Include="package.json" />
-    <Content Include="ql-matchdata-sample.json" />
     <Content Include="README.md" />
     <Compile Include="backfill-factory.node.js" />
     <Compile Include="feeder.node.js" />
+    <Compile Include="fill-server-geoip.node.js" />
     <Compile Include="modules\geoip.js" />
-    <Compile Include="fill-server-geoip.js" />
     <Compile Include="select-jsons.node.js" />
-    <Compile Include="validate-glicko.js" />
     <Compile Include="modules\glicko1.js" />
     <Compile Include="modules\gamerating.js" />
     <Compile Include="recalc-glicko.node.js" />
@@ -50,6 +49,7 @@
     <Content Include="sample-data\combined_stats_ad.json" />
     <Content Include="sample-data\combined_stats_ctf.json" />
     <Content Include="sample-data\combined_stats_ft.json" />
+    <Content Include="sample-data\combined_stats_race.json" />
     <Content Include="sample-data\match_report.json" />
     <Content Include="sample-data\match_started.json" />
     <Content Include="sample-data\playerstats1.json" />
