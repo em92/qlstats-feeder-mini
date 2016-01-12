@@ -133,27 +133,24 @@ function getServerPlayers(req, res) {
   var addr = req.params.addr;
   if (!addr) return { ok: false, msg: "No server address specified" };
 
-  return Q(getAggregatedServerStatusData())
-    .then(function(serverStatus) {
+  return Q.all([getAggregatedServerStatusData(), getSkillRatings()])
+    .then(function (info) {
+      var serverStatus = info[0];
+      var ratings = info[1];
       var status = serverStatus[addr];
       if (!status) return { ok: false, msg: "Server is not being tracked" };
 
+      var gt = status.gt || _getServerGametypeCache[addr];
       var keys = status.p ? Object.keys(status.p) : [];
       var players = keys.reduce(function(result, steamid) {
         var player = status.p[steamid];
         if (!player.quit) {
-          var gt = status.gt || _getServerGametypeCache[addr];
-          var getRating = gt ? Q(getSkillRatings()).then(function (ratings) {
-
-            return ratings[steamid] ? ratings[steamid][gt] : undefined;
-          }) : Q(undefined);
-          result.push(getRating.then(function(rating) { return { steamid: steamid, name: player.name, team: player.team, rating: rating, time: player.time } }));
+          var rating = gt && ratings && ratings[steamid] ? ratings[steamid][gt] : undefined;
+          result.push({ steamid: steamid, name: player.name, team: player.team, rating: rating, time: player.time });
         }
         return result;
       }, []);
-      return Q.all(players).then(function(results) {
-        return { ok: true, players: results };
-      });
+      return { ok: true, players: players, serverinfo: getServerInfo(addr, status, gt, ratings) };
     });
 }
 
@@ -216,28 +213,42 @@ function getServerSkillrating() {
         return;
       }
 
-      var totalRating = 0;
-      var maxRating = 0;
-      var minRating = 9999;
-      var count = 0;
-      Object.keys(conn.p).reduce(function(prev, steamid) {
-        var player = conn.p[steamid];
-        if (player.team < 0 || player.team >= 3 || player.quit) return;
-        var playerRating = skillInfo[steamid];
-        var rating = playerRating ? playerRating[gt] : null;
-        if (!rating) return;
-        ++count;
-        totalRating += rating;
-        maxRating = Math.max(maxRating, rating);
-        minRating = Math.min(minRating, rating);
-      }, []);
-      info.push({ server: addr, gt: gt, min: count == 0 ? 0 : Math.round(minRating), avg: count == 0 ? 0 : Math.round(totalRating / count), max: Math.round(maxRating) });
+      info.push(getServerInfo(addr, conn, gt, skillInfo));
     });
 
     _getServerSkillratingCache.timestamp = now;
     _getServerSkillratingCache.data = info;
     return info;
   }
+}
+
+function getServerInfo(addr, serverStatus, gt, skillInfo) {
+  var totalRating = 0;
+  var maxRating = 0;
+  var minRating = 9999;
+  var count = 0;
+  var playerCount = 0, botCount = 0, specCount = 0;
+  Object.keys(serverStatus.p).reduce(function (prev, steamid) {
+    var player = serverStatus.p[steamid];
+    if (player.quit)
+      return;
+    if (steamid == 0)
+      ++botCount;
+    else if (player.team == -1 || player.team >= 3) {
+      ++specCount;
+      return;
+    }
+    else
+      ++playerCount;
+    var playerRating = skillInfo[steamid];
+    var rating = playerRating ? playerRating[gt] : null;
+    if (!rating) return;
+    ++count;
+    totalRating += rating;
+    maxRating = Math.max(maxRating, rating);
+    minRating = Math.min(minRating, rating);
+  }, []);
+  return { server: addr, gt: gt, min: count == 0 ? 0 : Math.round(minRating), avg: count == 0 ? 0 : Math.round(totalRating / count), max: Math.round(maxRating), pc: playerCount, sc: specCount, bc: botCount };  
 }
 
 function runServerBrowserQuery(req) {

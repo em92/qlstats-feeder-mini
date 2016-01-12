@@ -111,7 +111,7 @@ function createGameTypeStrategy(gametype) {
     "duel": ["duel", "qcon_duel"],
     "ffa": ["ffa", "mg_ffa_classic"],
     "ca": ["ca", "capickup"],
-    "tdm": ["ctdm", "qcon_tdm"],
+    "tdm": ["ctdm", "qcon_tdm", "mg_tdm_fullclassic", "tdm_classic"],
     "ctf": ["ctf", "ctf2", "qcon_ctf"],
     "ft": ["freeze", "cftag", "ft", "ftclassic", "ft_classic", "mg_ft_fullclassic", "vft"]
   }
