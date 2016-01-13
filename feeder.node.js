@@ -443,97 +443,151 @@ function removeServer(conn) {
 
 /**
  * Callback function for events on ZeroMQ connections
+ * This function keeps track of the number of rounds and the time played by each player per team.
+ * PLAYER_STATS.PLAY_TIME unfortunately includes warmup and is useless.
  */
 function onZmqMessageCallback(conn, data) {
   var msg = data.toString();
   var obj = JSON.parse(msg);
+  var now = new Date().getTime();
   _logger.trace(conn.addr + ": received ZMQ message: " + msg);
 
   //fs.writeFileSync("temp/" + obj.TYPE.toLowerCase() + ".json", msg);
 
-  if (obj.TYPE == "PLAYER_CONNECT") {
+  if (obj.TYPE == "PLAYER_CONNECT")
     setPlayerTeam(conn, obj.DATA, 3);
-  }
   else if (obj.TYPE == "PLAYER_DISCONNECT") {
     var p = conn.players[obj.DATA.STEAM_ID];
-    if (p)
+    if (p) {
       p.quit = true;
+      updatePlayerPlayTime(p);
+    }
   }
   else if (obj.TYPE == "PLAYER_SWITCHTEAM") {
+    var p = conn.players[obj.DATA.KILLER.STEAM_ID];
+    updatePlayerPlayTime(p);
     setPlayerTeam(conn, obj.DATA.KILLER);
   }
   else if (obj.TYPE == "PLAYER_KILL") {
     setPlayerTeam(conn, obj.DATA.KILLER);
     setPlayerTeam(conn, obj.DATA.VICTIM);
   }
-  else if (obj.TYPE == "MATCH_STARTED") {
-    _logger.debug(conn.addr + ": match started");
-    var now = new Date().getTime();
-    conn.matchStartTime = now;
-    conn.gameType = (obj.DATA.GAME_TYPE || "").toLowerCase() || null;
-    conn.factory = (obj.DATA.FACTORY || "").toLowerCase() || null;
-    Object.keys(conn.players).forEach(function(steamid) {
-      conn.players[steamid].time = now;
-      conn.players[steamid].rounds = {};
-    });
-    conn.round = 1;
-    conn.roundTimer = setTimeout(function() { roundSnapshot(conn) }, 10 * 1000); // "prepare to fight! round begins in: 10 ... 3, 2, 1, FIGHT!"
-  }
-  else if (obj.TYPE == "ROUND_OVER") {
-    ++conn.round;
-    conn.roundTimer = setTimeout(function() { roundSnapshot(conn) }, 14 * 1000); // "red won the round! round begins in: 10 ... 3, 2, 1, FIGHT!"
-  }
+  else if (obj.TYPE == "PLAYER_DEATH")
+    setPlayerTeam(conn, obj.DATA.VICTIM);
+  else if (obj.TYPE == "MATCH_STARTED")
+    onMatchStarted();
+  else if (obj.TYPE == "ROUND_OVER")
+    onRoundOver();
   else if (obj.TYPE == "PLAYER_STATS") {
     if (!obj.DATA.WARMUP)
       conn.playerStats.push(obj.DATA);
   }
-  else if (obj.TYPE == "MATCH_REPORT") {
-    _logger.debug(conn.addr + ": match finished");
-    clearTimeout(conn.roundTimer);
-    var stats = {
-      serverIp: conn.ip,
-      serverPort: conn.port,
-      gameEndTimestamp: Math.round(new Date().getTime() / 1000),
-      matchStats: obj.DATA,
-      playerStats: conn.playerStats,
-      roundCount: getRoundsInformation(conn)
-    };
-    conn.playerStats = [];
-    Object.keys(conn.players).forEach(function(steamid) {
-      if (conn.players[steamid].quit)
-        delete conn.players[steamid];
-    }); 
-
-    //conn.gameType = null;  // assume it will stay the same, since QL doesn't provide any timely update after map change
-    conn.matchStartTime = 0;
-
-    // save .json.gz and/or process the data for uploading it to xonstatdb
-    var tasks = [];
-    if (_config.feeder.saveDownloadedJson)
-      tasks.push(saveGameJson(stats).catch(function (err) { _logger.error("failed saving .json.gz: " + err) }));
-    if (_config.feeder.importDownloadedJson)
-      tasks.push(processGameData(stats).catch(function (err) { _logger.error("failed saving .json.gz: " + err) }));
-    Q.allSettled(tasks);
+  else if (obj.TYPE == "MATCH_REPORT")
+    onMatchReport();
+  
+  
+  function onMatchStarted() {
+    _logger.debug(conn.addr + ": match started");
+    conn.matchStartTime = now;
+    conn.matchDuration = 0;
+    conn.gameType = (obj.DATA.GAME_TYPE || "").toLowerCase() || null;
+    conn.factory = (obj.DATA.FACTORY || "").toLowerCase() || null;
+    Object.keys(conn.players).forEach(function (steamid) {
+      var p = conn.players[steamid];
+      p.time = now;
+      p.playTimes = [0, 0, 0]; // time for team free, red, blue
+      p.rounds = {}; // dict with round number => team number
+    });
+    conn.round = 1;
+    conn.roundStartTime = now;
+    conn.roundDurations = [];
+    conn.roundTimer = setTimeout(function () { roundSnapshot(conn) }, 10 * 1000); // "prepare to fight! round begins in: 10 ... 3, 2, 1, FIGHT!"    
+  }
+  
+  function onRoundOver() {
+    var duration = Math.round((now - conn.roundStartTime) / 1000);
+    conn.matchDuration += duration;
+    Object.keys(conn.players).forEach(function (steamid) {
+      var p = conn.players[steamid];
+      if (p.rounds[conn.round])
+        p.playTimes[p.rounds[conn.round]] += duration; // add time to the team that the player played in this round (could be different team now)
+    });
+    
+    ++conn.round;
+    conn.roundStartTime = now;
+    conn.roundTimer = setTimeout(function () { roundSnapshot(conn) }, 14 * 1000); // "red won the round! round begins in: 10 ... 3, 2, 1, FIGHT!"    
   }
 
   function setPlayerTeam(conn, playerData, overrideTeam) {
     var steamid = playerData.STEAM_ID;
     var player = conn.players[steamid];
     if (!player)
-      conn.players[steamid] = player = { team: -1, time: new Date().getTime(), rounds: {}, quit: false };
-    var teams = [0, "0", "FREE", 1, "1", "RED", 2, "2", "BLUE", 3, "3", "SPECTATOR"];
+      conn.players[steamid] = player = { team: -1, time: now, rounds: {}, quit: false, playTimes:[0,0,0] };
+    var teams = [0, "FREE", 1, "RED", 2, "BLUE", 3, "SPECTATOR"];
     var team = overrideTeam !== undefined ? overrideTeam : playerData.TEAM;
-    player.team = Math.floor(teams.indexOf(team) / 3);
+    player.team = Math.floor(teams.indexOf(team) / 2);
     player.name = playerData.NAME;
     player.quit = false;
   }
+  
+  function updatePlayerPlayTime(p) {
+    if (!p) return;
+    if ("ca,ft,ad".indexOf(conn.gameType || "-") >= 0) return;
+    
+    // for non-round-based games update playTimes immediately
+    if (p.team >= 0 && p.team <= 2)
+      p.playTimes[p.team] += Math.round((now - p.time) / 1000);
+    
+    p.time = now;    
+  }
 
   function roundSnapshot(conn) {
+    // this funtion is timed to the "FIGHT!" announcement and take a snapshot of the players who participated in that round
     Object.keys(conn.players).forEach(function(steamid) {
       var p = conn.players[steamid];
-      if ((p.team == 1 || p.team == 2) && !p.quit)
+      if ((p.team == 1 || p.team == 2) && !p.quit) {
         p.rounds[conn.round] = p.team;
+        if (p.team !== p.rounds[conn.round - 1])
+          p.time = conn.roundStartTime;
+      }
     });
+  }
+  
+  function onMatchReport() {
+    _logger.debug(conn.addr + ": match finished");
+    Object.keys(conn.players).forEach(function (steamid) {
+      var p = conn.players[steamid];
+      updatePlayerPlayTime(p);
+    });
+    if (conn.rounds <= 1) // for non-round-based games
+      conn.matchDuration = now - conn.matchStartTime;
+    
+    clearTimeout(conn.roundTimer);
+    var stats = {
+      serverIp: conn.ip,
+      serverPort: conn.port,
+      gameEndTimestamp: Math.round(now / 1000),
+      matchStats: obj.DATA,
+      playerStats: conn.playerStats,
+      roundCount: getRoundsInformation(conn),
+      playTimes: getPlayTimeInformation(conn)
+    };
+    conn.playerStats = [];
+    Object.keys(conn.players).forEach(function (steamid) {
+      if (conn.players[steamid].quit)
+        delete conn.players[steamid];
+    });
+    
+    //conn.gameType = null;  // assume it will stay the same, since QL doesn't provide any timely update after map change
+    conn.matchStartTime = 0;
+    
+    // save .json.gz and/or process the data for uploading it to xonstatdb
+    var tasks = [];
+    if (_config.feeder.saveDownloadedJson)
+      tasks.push(saveGameJson(stats).catch(function (err) { _logger.error("failed saving .json.gz: " + err) }));
+    if (_config.feeder.importDownloadedJson)
+      tasks.push(processGameData(stats).catch(function (err) { _logger.error("failed saving .json.gz: " + err) }));
+    Q.allSettled(tasks);   
   }
 
   function getRoundsInformation(conn) {
@@ -557,6 +611,18 @@ function onZmqMessageCallback(conn, data) {
       return aggregate;
     }, {});
     return { total: conn.round - 1, players: playerRounds };
+  }
+
+  function getPlayTimeInformation(conn) {
+    if (!conn.matchStartTime)
+      return undefined;
+    var playTimes = Object.keys(conn.players).reduce(function (aggregate, steamid) {
+      var times = conn.players[steamid].playTimes;
+      if (times[0] + times[1] + times[2])
+        aggregate[steamid] = times.slice();
+      return aggregate;
+    }, {});
+    return { total: Math.round(conn.matchTime/1000), players: playTimes };
   }
 }
 

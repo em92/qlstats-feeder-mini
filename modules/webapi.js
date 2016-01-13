@@ -145,8 +145,8 @@ function getServerPlayers(req, res) {
       var players = keys.reduce(function(result, steamid) {
         var player = status.p[steamid];
         if (!player.quit) {
-          var rating = gt && ratings && ratings[steamid] ? ratings[steamid][gt] : undefined;
-          result.push({ steamid: steamid, name: player.name, team: player.team, rating: rating, time: player.time });
+          var rating = gt && ratings && ratings[steamid] ? ratings[steamid][gt] || {} : {};
+          result.push({ steamid: steamid, name: player.name, team: player.team, rating: rating.r, rd: rating.rd, time: player.time });
         }
         return result;
       }, []);
@@ -241,7 +241,7 @@ function getServerInfo(addr, serverStatus, gt, skillInfo) {
     else
       ++playerCount;
     var playerRating = skillInfo[steamid];
-    var rating = playerRating ? playerRating[gt] : null;
+    var rating = playerRating && playerRating[gt] ? playerRating[gt].r : null;
     if (!rating) return;
     ++count;
     totalRating += rating;
@@ -323,7 +323,7 @@ function getSkillRatings() {
       var player = info[row.hashkey];
       if (!player)
         info[row.hashkey] = player = {};
-      player[row.game_type_cd] = Math.round(row.g2_r);
+      player[row.game_type_cd] = { r: Math.round(row.g2_r), rd: Math.round(row.g2_rd) };
     });
     return info;
   }
