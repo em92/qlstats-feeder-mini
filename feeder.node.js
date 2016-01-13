@@ -559,8 +559,8 @@ function onZmqMessageCallback(conn, data) {
       var p = conn.players[steamid];
       updatePlayerPlayTime(p);
     });
-    if (conn.rounds <= 1) // for non-round-based games
-      conn.matchDuration = now - conn.matchStartTime;
+    if (conn.round <= 1) // for non-round-based games
+      conn.matchDuration = Math.round((now - conn.matchStartTime)/1000);
     
     clearTimeout(conn.roundTimer);
     var stats = {
@@ -622,7 +622,7 @@ function onZmqMessageCallback(conn, data) {
         aggregate[steamid] = times.slice();
       return aggregate;
     }, {});
-    return { total: Math.round(conn.matchTime/1000), players: playTimes };
+    return { total: conn.matchDuration, players: playTimes };
   }
 }
 
