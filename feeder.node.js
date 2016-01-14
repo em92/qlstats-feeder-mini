@@ -677,6 +677,10 @@ function processGameData(game) {
 
   var gt = game.matchStats.GAME_TYPE.toLowerCase();
 
+  game.playerStats = aggregatePlayerStats();
+  if (game.playTimes)
+    game.matchStats.GAME_LENGTH = game.playTimes.total;
+
   // verify minimum number of players in each team (this is for saving stats, ranking has additional requirements)
   var playerCounts = game.playerStats.reduce(function(counts, player) {
     ++counts[player.TEAM || 0];
@@ -708,7 +712,7 @@ function processGameData(game) {
   }
 
   return postMatchReportToXonstat(addr, game, report)
-    .then(function (result) {
+    .then(function(result) {
       if (!_config.feeder.calculateGlicko)
         return Q(true);
       if (!result.ok || !result.game_id) {
@@ -723,6 +727,42 @@ function processGameData(game) {
         saveGameJson(game, true);
       throw err;
     });
+
+  function aggregatePlayerStats() {
+    var partialPlayTimes = game.playerStats.reduce(function (aggregate, data) {
+      var key = data.STEAM_ID + "_" + data.TEAM;
+      var p = aggregate[key];
+      if (!p)
+        aggregate[key] = data;
+      else
+        summarize(p, data);
+      return aggregate;
+    }, {});
+
+    return Object.keys(partialPlayTimes).map(function(key) {
+      var p = partialPlayTimes[key];
+      if (game.playTimes && game.playTimes.players[p.STEAM_ID])
+        p.PLAY_TIME = game.playTimes.players[p.STEAM_ID][p.TEAM || 0]; // substitute broken QL play time with accurate time
+      return p;
+    });
+
+    function summarize(t, s) {
+      Object.keys(s).forEach(function (key) {
+        var val = s[key];
+        if (key.indexOf("RANK") >= 0) {
+          if ((t[key] || 0) <= 0 || val < t[key])
+            t[key] = val;
+        }
+        else if (typeof (val) == "number")
+          t[key] = (t[key] || 0) + val;
+        else if (typeof (val) == "object") {
+          if (!t[key])
+            t[key] = {};
+          summarize(t[key], s[key]);
+        }
+      });
+    }
+  }
 }
 
 function isTeamGame(gt) {

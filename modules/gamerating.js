@@ -438,6 +438,21 @@ function extractDataFromGameObject(game) {
         pd.win = true;
       isTeamGame |= p.hasOwnProperty("TEAM");
     });
+    
+    // on 2016-01-14 feeder started to track play times manually to exclude the map load + warmup time from PLAY_TIME
+    if (game.playTimes) {
+      timeBlue = 0;
+      timeRed = 0;
+      game.matchStats.GAME_LENGTH = game.playTimes.total;
+      Object.keys(playerData).forEach(function(steamid) {
+        var times = game.playTimes.players[steamid];
+        if (times) {
+          var pd = playerData[steamid];
+          timeRed += pd.timeRed = times[0] + times[1];
+          timeBlue += pd.timeBlue = times[1];
+        }
+      });
+    }
   }
 
   function calculatePlayerRanking() {
