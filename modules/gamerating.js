@@ -111,9 +111,9 @@ function createGameTypeStrategy(gametype) {
   var ValidFactoriesForGametype = {
     "duel": ["duel", "qcon_duel"],
     "ffa": ["ffa", "mg_ffa_classic"],
-    "ca": ["ca", "capickup"],
-    "tdm": ["ctdm", "qcon_tdm", "mg_tdm_fullclassic", "tdm_classic"],
-    "ctf": ["ctf", "ctf2", "qcon_ctf"],
+    "ca": ["ca", "capickup", "hoq_ca"],
+    "tdm": ["ctdm", "qcon_tdm", "mg_tdm_fullclassic", "tdm_classic", "hoq_tdm"],
+    "ctf": ["ctf", "ctf2", "qcon_ctf", "hoq_ctf"],
     "ft": ["freeze", "cftag", "ft", "ftclassic", "ft_classic", "mg_ft_fullclassic", "vft"]
   }
   var MinRequiredPlayersForGametype = {
@@ -450,7 +450,7 @@ function extractDataFromGameObject(game) {
         if (times) {
           var pd = playerData[steamid];
           timeRed += pd.timeRed = times[0] + times[1];
-          timeBlue += pd.timeBlue = times[1];
+          timeBlue += pd.timeBlue = times[2];
         }
       });
     }

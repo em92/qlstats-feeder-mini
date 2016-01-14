@@ -51,6 +51,7 @@ var _config; // config data object
 var _ignoreConfigChange = false;
 var _reloadErrorFiles = false;
 var _deleteBrokenFiles = false;
+var _gameId = 0;
 
 /**
  * @type Object.<string,StatsConnection> using IP:port as key
@@ -92,6 +93,10 @@ function parseCommandLine() {
   while (args[0] && args[0][0] == "-") {
     if (args[0] == "-c" && args.length >= 2) {
       _configFileName = args[1];
+      args = args.slice(1);
+    }
+    else if (args[0] == "-g") {
+      _gameId = args[1];
       args = args.slice(1);
     }
     else if (args[0] == "-e")
@@ -716,8 +721,12 @@ function processGameData(game) {
       if (!_config.feeder.calculateGlicko)
         return Q(true);
       if (!result.ok || !result.game_id) {
-        _logger.debug("game could not be rated: " + game.matchStats.MATCH_GUID);
-        return Q(false);
+        if (_gameId)
+          result = { game_id: _gameId } // this is for running a match data file through the debugger
+        else {
+          _logger.debug("game could not be rated: " + game.matchStats.MATCH_GUID);
+          return Q(false);
+        }
       }
       var rating = require("./modules/gamerating");
       return rating.rateSingleGame(result.game_id, game);
