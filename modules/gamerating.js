@@ -37,6 +37,7 @@ var _lastProcessedMatchStartDt;
 
 exports.rateAllGames = rateAllGames;
 exports.rateSingleGame = rateSingleGame;
+exports.createGameTypeStrategy = createGameTypeStrategy;
 
 const _logger = log4js.getLogger("gamerating");
 

@@ -4,7 +4,8 @@
   log4js = require("log4js"),
   request = require("request"),
   gsq = require("game-server-query"),
-  Q = require("q");
+  Q = require("q"),
+  gr = require("./gamerating");
 
 exports.init = init;
 
@@ -79,6 +80,12 @@ function init(config, app, feeder) {
       .finally(function() { res.end(); });
   });
 
+  app.get("/api/a_rated_factories", function(req, res) {
+    Q(getARatedFactories(req))
+      .then(function (obj) { res.json(obj); })
+      .catch(function (err) { res.json({ ok: false, msg: "internal error: " + err }); })
+      .finally(function () { res.end(); });
+  });
 }
 
 // to be removed, deprecated by queryJson
@@ -258,6 +265,15 @@ function runServerBrowserQuery(req) {
   var addr = req.params.addr;
   if (!addr) return { ok: false, msg: "No server address specified" };
   return runServerBrowserQueryInternal(addr);
+}
+
+function getARatedFactories() {
+  var factories = {};
+  ["duel", "ffa", "ca", "tdm", "ctf", "ft"].forEach(function (gt) {
+    var strat = gr.createGameTypeStrategy(gt);
+    factories[gt] = strat.validFactories;
+  });
+  return factories;
 }
 
 
