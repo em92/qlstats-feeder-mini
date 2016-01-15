@@ -34,6 +34,13 @@ function init(config, app, feeder) {
       .finally(function() { res.end(); });
   });
 
+  app.get("/api/player/:id/locate", function(req, res) {
+    Q(locatePlayer(req, res))
+      .then(function (obj) { res.json(obj); })
+      .catch(function (err) { res.json({ ok: false, msg: "internal error: " + err }); })
+      .finally(function () { res.end(); });
+  });
+
   if (!_config.webapi.enabled)
     return;
 
@@ -161,6 +168,36 @@ function getServerPlayers(req, res) {
     });
 }
 
+function locatePlayer(req, res) {
+  res.set("Access-Control-Allow-Origin", "*");
+  var steamid = req.params.id;
+  var stats = _feeder.getStatsConnections();
+  for (var addr in stats) {
+    if (!stats.hasOwnProperty(addr)) continue;
+    var conn = stats[addr];
+    if (conn.players[steamid])
+      return { ok: true, steamid: steamid, server: conn.addr };
+  }
+
+  if (_config.webapi.aggregatePanelPorts.length == 0)
+    return { ok: true, steamid: steamid, server: null };
+
+  var tasks = [];
+  _config.webapi.aggregatePanelPorts.forEach(function(port) {
+    tasks.push(getJsonFromPort(port, "/api/player/" + steamid + "/locate"));
+  });
+  return Q
+    .allSettled(tasks)
+    .then(function(results) {
+      for (var i = 0; i < results.length; i++) {
+        var result = results[i];
+        if (result.state != "fulfilled") continue;
+        if (result.value && result.value.server)
+          return result.value;
+      }
+      return { ok: true, steamid: steamid, server: null };
+    });
+}
 
 // internal API used to aggregate live server information from multiple feeder instances
 function getServerStatusdump(req) {
@@ -374,28 +411,34 @@ function getAggregatedServerStatusData() {
 
   // load status dump from a different admin panel port and aggregate the information
   function getStatusdumpFromPort(port) {
-    var defer = Q.defer();
-    var ok = true;
-    var buffer = "";
-    request.get("http://127.0.0.1:" + port + "/api/server/statusdump", { timeout: 1000 })
-      .on("error", function(err) { defer.reject(err); })
-      .on("response", function(response) {
-        if (response.statusCode != 200) {
-          ok = false;
-          defer.reject(new Error("HTTP status code " + response.statusCode));
-        }
-      })
-      .on("data", function(data) { buffer += data; })
-      .on("end", function() {
-        if (!ok) return;
-        var info = JSON.parse(buffer);
+    return getJsonFromPort(port, "/api/server/statusdump")
+      .then(function(info) {
         for (var key in info) {
           if (!info.hasOwnProperty(key)) continue;
           aggregateInfo[key] = info[key];
         }
-        defer.resolve(info);
-      }).end();
-
-    return defer.promise;
+      });
   }
+}
+
+function getJsonFromPort(port, route) {
+  var defer = Q.defer();
+  var ok = true;
+  var buffer = "";
+  request.get("http://127.0.0.1:" + port + route, { timeout: 1000 })
+    .on("error", function(err) { defer.reject(err); })
+    .on("response", function(response) {
+      if (response.statusCode != 200) {
+        ok = false;
+        defer.reject(new Error("HTTP status code " + response.statusCode));
+      }
+    })
+    .on("data", function(data) { buffer += data; })
+    .on("end", function() {
+      if (!ok) return;
+      var info = JSON.parse(buffer);
+      defer.resolve(info);
+    }).end();
+
+  return defer.promise;
 }
