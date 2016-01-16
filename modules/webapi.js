@@ -175,7 +175,7 @@ function locatePlayer(req, res) {
   for (var addr in stats) {
     if (!stats.hasOwnProperty(addr)) continue;
     var conn = stats[addr];
-    if (conn.players[steamid])
+    if (conn.players[steamid] && !conn.players[steamid].quit)
       return { ok: true, steamid: steamid, server: conn.addr };
   }
 

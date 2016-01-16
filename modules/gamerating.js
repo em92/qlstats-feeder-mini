@@ -128,9 +128,9 @@ function createGameTypeStrategy(gametype) {
     "duel": function(game) { return game.matchStats.GAME_LENGTH >= 10 * 60 - 5 || game.matchStats.EXIT_MSG.indexOf("forfeited") >= 0 },
     "ffa": function(game) { return game.matchStats.FRAG_LIMIT >= 50 },
     "ca": function(game) { return Math.max(game.matchStats.TSCORE0, game.matchStats.TSCORE1) >= 8 /* old JSONS have no ROUND_LIMIT */ },
-    "tdm": function(game) { return Math.max(game.matchStats.TSCORE0, game.matchStats.TSCORE1) >= 100 || game.matchStats.GAME_LENGTH >= 15 * 10 },
-    "ctf": function(game) { return Math.max(game.matchStats.TSCORE0, game.matchStats.TSCORE1) >= 8 || game.matchStats.GAME_LENGTH >= 15 * 10 },
-    "ft": function(game) { return Math.max(game.matchStats.TSCORE0, game.matchStats.TSCORE1) >= 8 /* old JSONS have no ROUND_LIMIT */ }
+    "tdm": function(game) { return Math.max(game.matchStats.TSCORE0, game.matchStats.TSCORE1) >= 100 || game.matchStats.GAME_LENGTH >= 15 * 60 },
+    "ctf": function(game) { return Math.max(game.matchStats.TSCORE0, game.matchStats.TSCORE1) >= 8 || game.matchStats.GAME_LENGTH >= 15 * 60 },
+    "ft": function(game) { return Math.max(game.matchStats.TSCORE0, game.matchStats.TSCORE1) >= 8 || game.matchStats.GAME_LENGTH >= 15 * 60 /* old JSONS have no ROUND_LIMIT */ }
   }
   
   // a and b are performance scores adjusted for participation time
@@ -138,8 +138,8 @@ function createGameTypeStrategy(gametype) {
     "duel": function() { return false; },
     "ffa": function(a, b, game) { return Math.abs(a - b) <= 2 * Math.max(1, game.matchStats.FRAG_LIMIT/50) },
     "ca": function(a, b) { return Math.abs(a - b) <= 2 },
-    "tdm": function(a, b) { return a / b <= 1.1 && b / a <= 1.1 },
-    "ctf": function(a, b) { return a / b <= 1.1 && b / a <= 1.1 },
+    "tdm": function(a, b) { return a / b <= 1.05 && b / a <= 1.05 },
+    "ctf": function(a, b) { return a / b <= 1.05 && b / a <= 1.05 },
     "ft": function(a, b) { return Math.abs(a - b) <= 5; }
   }
 
