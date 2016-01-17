@@ -1,4 +1,4 @@
-﻿<html>
+<html>
 <head>
   <script src="https://ajax.googleapis.com/ajax/libs/jquery/2.1.4/jquery.min.js"></script>
 
@@ -84,7 +84,7 @@
     <tr><td>ZMQ Stats Password:</td><td><input id="addPwd1" type="text" size="20" /></td><td>(of your first listed server)</td></tr>
     <tr><td>Repeat Password:</td><td><input id="addPwd2" type="text" size="20" /></td><td>(required for new owners)</td></tr>
     <tr><td>&nbsp;</td></tr>
-    <tr><td>Server Address:</td><td><input id="addAddr" type="text" size="20"/></td><td>(IPv4:port)</td></tr>
+    <tr><td>Server Address:</td><td><input id="addAddr" type="text" size="20"/></td><td>(IPv4:port for ZMQ stats)</td></tr>
   </table>
   <div class="buttons">
     <div id="addBtnOk" class="button">Submit</div>
@@ -104,6 +104,7 @@
     <tr><td>Repeat Password:</td><td><input id="editPwd2" type="text" size="20"/></td></tr>
     <tr><td>&nbsp;</td></tr>
     <tr><td>New Server Address:</td><td><input id="editAddr" type="text" size="20"/></td><td><div id="editBtnDelete" class="button">Delete Server(s)</div></td></tr>
+    <tr><td>Game Port:</td><td><input id="editGamePort" type="text" size="10" /></td><td>(if &ne; ZMQ port)</td></tr>
   </table>
   <div class="buttons">
     <div id="editBtnOk" class="button">Submit</div>
@@ -174,6 +175,7 @@
     $("#addForm").css("display", "none");
     $("#editForm").css("display", "block");
     $("#editAddr").val(type != "owner" ? value : "*");
+    $("#editGamePort").val("");
   }
 
   function setOwnerServerTitle(type, value) {
@@ -188,7 +190,7 @@
       owner: $("#addOwner").val(),
       newPwd1: $("#addPwd1").val(),
       newPwd2: $("#addPwd2").val(),
-      newAddr: $("#addAddr").val()
+      newAddr: $("#addAddr").val(),
     }
 
     $("#addStatusText").text("");
@@ -220,7 +222,8 @@
       oldPwd: $("#editPwd0").val(),
       newPwd1: $("#editPwd1").val(),
       newPwd2: $("#editPwd2").val(),
-      newAddr: $("#editAddr").val().replace("*", "")
+      newAddr: $("#editAddr").val().replace("*", ""),
+      newGamePort: $("#editGamePort").val()
     }
 
     $("#editStatusText").text("");
@@ -247,7 +250,7 @@
   }
 
   function main() {
-    var panels = [8081, 8082, 8083];
+    var panels = [8081, 8082, 8083, 8084 ];
     if (panels.length > 1) {
       var sep = "";
       for (var i = 0; i < panels.length; i++) {
@@ -273,7 +276,7 @@
         submitEditForm("delete");
     });
 
-    $("#mainSite").attr("href", "http://" + location.hostname + "/");
+    $("#mainSite").attr("href", "http://" + location.hostname + "/").text(location.hostname);
   }
 
   main();

@@ -5,7 +5,8 @@
   request = require("request"),
   gsq = require("game-server-query"),
   Q = require("q"),
-  gr = require("./gamerating");
+  gr = require("./gamerating"),
+  utils = require("./utils");
 
 exports.init = init;
 
@@ -20,6 +21,19 @@ var _feeder = {
   getStatsConnections: function() {}
 };
 
+var _getServerSkillratingCache = { timestamp: 0, data: null, updatePromise: null };
+var _getServerBrowserInfoCache = { };
+var _getPlayerSkillratingsCache = { timestamp: 0, data: {}, updatePromise: null };
+var _getAggregatedStatusDataCache = { timestamp: 0, data: {}, updatePromise: null };
+var _getZmqFromGamePortCache = { timestamp: 0, data: {}, updatePromise: null };
+
+
+/**
+ * Initializes the module and sets up the API routes in the express HTTP server
+ * @param {} config - cfg.json object
+ * @param {} app - express application object
+ * @param {} feeder - interface with callback functions to the feeder module
+ */
 function init(config, app, feeder) {
   _config = config;
   _feeder = feeder;
@@ -46,9 +60,9 @@ function init(config, app, feeder) {
 
   // Public API methods
 
-  app.get("/api/jsons/:date", function(req, res) {
-    Q(listJsons(req))
-      .then(function(result) { res.json(result); })
+  app.get("/api/jsons", function(req, res) {
+    Q(queryJson(req))
+      .then(function(obj) { res.json(obj); })
       .catch(function(err) { res.json({ ok: false, msg: "internal error: " + err }); })
       .finally(function() { res.end(); });
   });
@@ -59,22 +73,8 @@ function init(config, app, feeder) {
       .finally(function() { res.end(); });
   });
 
-  app.get("/api/jsons", function(req, res) {
-    Q(queryJson(req))
-      .then(function(obj) { res.json(obj); })
-      .catch(function(err) { res.json({ ok: false, msg: "internal error: " + err }); })
-      .finally(function() { res.end(); });
-  });
-
   app.get("/api/server/skillrating", function(req, res) {
     Q(getServerSkillrating(req))
-      .then(function(obj) { res.json(obj); })
-      .catch(function(err) { res.json({ ok: false, msg: "internal error: " + err }); })
-      .finally(function() { res.end(); });
-  });
-
-  app.get("/api/server/:addr/query", function(req, res) {
-    Q(runServerBrowserQuery(req))
       .then(function(obj) { res.json(obj); })
       .catch(function(err) { res.json({ ok: false, msg: "internal error: " + err }); })
       .finally(function() { res.end(); });
@@ -95,37 +95,15 @@ function init(config, app, feeder) {
   });
 }
 
-// to be removed, deprecated by queryJson
-function listJsons(req) {
-  var ts = Date.parse(req.params.date);
-  if (ts == NaN || !ts)
-    return { ok: false, msg: "Date must be provided in YYYY-MM-DD format" };
-  var date = new Date(ts);
-  var dir = __dirname + "/../" + _config.feeder.jsondir + "/" + date.getUTCFullYear() + "-" + ("0" + (date.getUTCMonth() + 1)).substr(-2) + "/" + ("0" + date.getUTCDate()).substr(-2);
-  return Q
-    .nfcall(fs.readdir, dir)
-    .then(function(files) { return { ok: true, files: files.map(function(name) { return name.substr(0, name.indexOf(".json")) }) }; })
-    .catch(function() { return { ok: false, msg: "File not found" } });
-}
 
-function getJson(req, res) {
-  var ts = Date.parse(req.params.date);
-  if (ts == NaN || !ts)
-    return Q(res.json({ ok: false, msg: "Date must be provided in YYYY-MM-DD format" }));
-
-  var date = new Date(ts);
-  var dir = __dirname + "/../" + _config.feeder.jsondir + "/" + date.getUTCFullYear() + "-" + ("0" + (date.getUTCMonth() + 1)).substr(-2) + "/" + ("0" + date.getUTCDate()).substr(-2) + "/";
-  var asGzip = req.path.substr(-3) == ".gz";
-  var options = {
-    root: dir,
-    dotfiles: "deny",
-    headers: asGzip ? {} : { "Content-Type": "application/json", "Content-Encoding": "gzip" }
-  };
-  return Q.ninvoke(res, "sendFile", req.params.file + ".json.gz", options).catch(function() { return res.json({ ok: false, msg: "File not found" }) });
-}
-
+/**
+ * Query the database for a list of match-GUIDs + match dates for a given server. With that information the JSONs can be downloaded through getJson().
+ * Used by kodisha to pull JSONs for omega CTF servers
+ * @param { query: {server, date} req express request, server="ip:port", date="YYYY-MM-ddTHH:mm:ssZ"
+ * @returns {ok=false, msg} | [{end, match_id}]
+ */
 function queryJson(req) {
-  return dbConnect()
+  return utils.dbConnect(_config.webapi.database)
     .then(function(cli) {
       if (!req.query.server)
         return { ok: false, msg: "'server' query parameter must be specified for the numeric server id" };
@@ -142,19 +120,50 @@ function queryJson(req) {
     });
 }
 
+/**
+ * Retrieve a JSON [.gz] data file based on the match date and match GUID.
+ * @param { params: {date, file}, path} req express request. date="YYYY-mm-dd", file=GUID, path="*.json[.gz]"
+ * @param {} res 
+ * @returns {} 
+ */
+function getJson(req, res) {
+  var ts = Date.parse(req.params.date);
+  if (ts == NaN || !ts)
+    return Q(res.json({ ok: false, msg: "Date must be provided in YYYY-MM-DD format" }));
+
+  var date = new Date(ts);
+  var dir = __dirname + "/../" + _config.feeder.jsondir + "/" + date.getUTCFullYear() + "-" + ("0" + (date.getUTCMonth() + 1)).substr(-2) + "/" + ("0" + date.getUTCDate()).substr(-2) + "/";
+  var asGzip = req.path.substr(-3) == ".gz";
+  var options = {
+    root: dir,
+    dotfiles: "deny",
+    headers: asGzip ? {} : { "Content-Type": "application/json", "Content-Encoding": "gzip" }
+  };
+  return Q.ninvoke(res, "sendFile", req.params.file + ".json.gz", options).catch(function() { return res.json({ ok: false, msg: "File not found" }) });
+}
+
+/**
+ * Returns a list of all players which appeared on a ZMQ message for the given server.
+ * This API method is used by SteamServerBrowser to get players, ratings, team info, steamid, ... for the currently selected server.
+ * @param {} req express request
+ * @param {} res express response
+ * @returns {ok, players:[{steamid, name, team, rating, rd, time}], serverinfo:{addr, gt, min, avg, max, pc, bc, sc, map}} 
+ */
 function getServerPlayers(req, res) {
   res.set("Access-Control-Allow-Origin", "*");
-  var addr = req.params.addr;
-  if (!addr) return { ok: false, msg: "No server address specified" };
+  var gameAddr = req.params.addr;
+  if (!gameAddr) return { ok: false, msg: "No server address specified" };
 
-  return Q.all([getAggregatedServerStatusData(), getSkillRatings()])
+  return Q.all([getAggregatedServerStatusData(), getSkillRatings(), getZmqFromGamePort()])
     .then(function (info) {
       var serverStatus = info[0];
       var ratings = info[1];
-      var status = serverStatus[addr];
+      var portMapping = info[2];
+      var zmqAddr = portMapping[gameAddr] || gameAddr;
+      var status = serverStatus[zmqAddr];
       if (!status) return { ok: false, msg: "Server is not being tracked" };
 
-      var gt = status.gt || _getServerGametypeCache[addr];
+      var gt = status.gt || (_getServerBrowserInfoCache[gameAddr] || {})["gt"];
       var keys = status.p ? Object.keys(status.p) : [];
       var players = keys.reduce(function(result, steamid) {
         var player = status.p[steamid];
@@ -164,12 +173,27 @@ function getServerPlayers(req, res) {
         }
         return result;
       }, []);
-      return { ok: true, players: players, serverinfo: getServerInfo(addr, status, gt, ratings) };
+      var serverinfo = calcServerInfo(zmqAddr, status, gt, ratings);
+      return getServerBrowserInfo(gameAddr)
+        .then(function(info) {
+          if (info)
+            serverinfo.map = info.map;
+          return { ok: true, players: players, serverinfo: serverinfo };
+        });
     });
 }
 
+/**
+ * Locate the server where a player with a given steamid is playing
+ * @param { params: { id } req express request
+ * @param {} res 
+ * @returns { ok: true, steamid, server: null | "ip:port" } 
+ */
 function locatePlayer(req, res) {
   res.set("Access-Control-Allow-Origin", "*");
+  if (!_config.webapi.enabled && !isInternalRequest(req))
+    return { ok: false, msg: "For internal use only" };
+
   var steamid = req.params.id;
   var stats = _feeder.getStatsConnections();
   for (var addr in stats) {
@@ -199,27 +223,11 @@ function locatePlayer(req, res) {
     });
 }
 
-// internal API used to aggregate live server information from multiple feeder instances
-function getServerStatusdump(req) {
-  if (!isInternalRequest(req))
-    return { ok: false, msg: "only internal connections allowed" };
 
-  var info = {};
-  var conns = _feeder.getStatsConnections();
-  var addrs = Object.keys(conns);
-  addrs.forEach(function(addr) {
-    var conn = conns[addr];
-    if (!conn.connected) return;
-    info[addr] = { gt: conn.gameType, f: conn.factory, p: conn.players };
-  });
-  return info;
-}
-
-
-// get a complete list of all servers from all feeder instances with current game type and min/max/avg player rating
-var _getServerSkillratingCache = { timestamp: 0, data: null, updatePromise: null };
-var _getServerGametypeCache = {};
-
+/**
+ * Method used by SteamServerBrowser for the initial list of all servers to get the skill rating and correct number of players (without ghosts)
+ * @returns data or promise for [{server, gt, min, avg, max, pc, sc, bc}]
+ */
 function getServerSkillrating() {
   var now = new Date().getTime();
   if (_getServerSkillratingCache.timestamp + 15000 > now)
@@ -243,21 +251,16 @@ function getServerSkillrating() {
     var delay = 0;
     addrs.forEach(function(addr) {
       var conn = serverStatus[addr];
-      var gt = conn.gt || _getServerGametypeCache[addr];
+      var gt = conn.gt || (_getServerBrowserInfoCache[addr] || {})["gt"];
       if (!gt) {
         // execute browser query in the background and put the result in the cache for the next call to this API
         Q.delay(delay += 100).then(function() {
-          runServerBrowserQueryInternal(addr).then(function(result) {
-            if (!result.state.error && result.state.raw && result.state.raw.rules) {
-              gt = (GameTypes[parseInt(result.state.raw.rules.g_gametype)] || "").toLowerCase();
-              _getServerGametypeCache[addr] = gt;
-            }
-          });
+          getServerBrowserInfo(addr);
         }).catch();
         return;
       }
 
-      info.push(getServerInfo(addr, conn, gt, skillInfo));
+      info.push(calcServerInfo(addr, conn, gt, skillInfo));
     });
 
     _getServerSkillratingCache.timestamp = now;
@@ -266,7 +269,85 @@ function getServerSkillrating() {
   }
 }
 
-function getServerInfo(addr, serverStatus, gt, skillInfo) {
+
+/**
+ * This is an internal API method only needed when there are separate feeder processes for tracking servers and hosting the API
+ * Using this method the API host process can get the actual data from the other feeder processes and aggregate it
+ * @param {} req 
+ * @returns {} 
+ */
+function getServerStatusdump(req) {
+  if (!isInternalRequest(req))
+    return { ok: false, msg: "only internal connections allowed" };
+
+  var info = {};
+  var conns = _feeder.getStatsConnections();
+  var addrs = Object.keys(conns);
+  addrs.forEach(function(addr) {
+    var conn = conns[addr];
+    if (!conn.connected) return;
+    info[addr] = { gp: conn.gamePort, gt: conn.gameType, f: conn.factory, p: conn.players };
+  });
+  return info;
+}
+
+
+/**
+ * This method returns a dictionary with game types and the list of supported factories for A-ratings.
+ * Minqlx can use this information to decide whether it should pull ratings from the /elo or /elo_b route of the python HTTP server
+ * @returns { gt: string[] factories } 
+ */
+function getARatedFactories() {
+  var factories = {};
+  ["duel", "ffa", "ca", "tdm", "ctf", "ft"].forEach(function (gt) {
+    var strat = gr.createGameTypeStrategy(gt);
+    factories[gt] = strat.validFactories;
+  });
+  return factories;
+}
+
+
+
+// helper functions
+
+
+// checks if the request is null or from a localhost IPv4 or IPv6
+function isInternalRequest(req) {
+  return !(req && req.connection.remoteAddress.indexOf("127.0.0.") < 0 && req.connection.remoteAddress != "::1");
+}
+
+
+// run a server browser query and return a promise for the result as { ok: true, state: {...} }
+function getServerBrowserInfo(gameAddr) {
+  var cached = _getServerBrowserInfoCache[gameAddr];
+  if (!cached)
+    cached = _getServerBrowserInfoCache[gameAddr] = { time: 0 };
+  else if (cached.time + 10 * 1000 >= new Date().getTime())
+    return Q(cached);
+  else if (cached.updatePromise != null)
+    return cached.updatePromise;
+
+  var parts = gameAddr.split(":");
+  var host = parts[0];
+  var gamePort = (parts[1] ? parseInt(parts[1]) : 0) || 27960;
+
+  
+  var def = Q.defer();
+  gsq({ type: "synergy", host: host, port: gamePort }, function(state) { def.resolve(state); });
+  
+  return cached.updatePromise = 
+    def.promise
+    .then(function(state) {
+      if (!state.error && state.raw && state.raw.rules) {
+        var gt = (GameTypes[parseInt(state.raw.rules.g_gametype)] || "").toLowerCase();
+        return _getServerBrowserInfoCache[gameAddr] = { time: new Date().getTime(), gt: gt, map: state.raw.rules.mapname };
+      }
+      return _getServerBrowserInfoCache[gameAddr] = null;
+    });
+}
+
+// get addr, gt, min, avg, max (rating) and count of players, specs and bots for the given server
+function calcServerInfo(addr, serverStatus, gt, skillInfo) {
   var totalRating = 0;
   var maxRating = 0;
   var minRating = 9999;
@@ -295,78 +376,25 @@ function getServerInfo(addr, serverStatus, gt, skillInfo) {
   return { server: addr, gt: gt, min: count == 0 ? 0 : Math.round(minRating), avg: count == 0 ? 0 : Math.round(totalRating / count), max: Math.round(maxRating), pc: playerCount, sc: specCount, bc: botCount };  
 }
 
-function runServerBrowserQuery(req) {
-  if (!isInternalRequest(req))
-    return { ok: false, msg: "only internal connections allowed" };
-
-  var addr = req.params.addr;
-  if (!addr) return { ok: false, msg: "No server address specified" };
-  return runServerBrowserQueryInternal(addr);
-}
-
-function getARatedFactories() {
-  var factories = {};
-  ["duel", "ffa", "ca", "tdm", "ctf", "ft"].forEach(function (gt) {
-    var strat = gr.createGameTypeStrategy(gt);
-    factories[gt] = strat.validFactories;
-  });
-  return factories;
-}
-
-
-// helper functions
-
-var _getSkillRatingsCache = { timestamp: 0, data: {}, updatePromise: null }
-var _getAggregatedStatusDataCache = { timestamp: 0, data: {}, updatePromise: null }
-
-function isInternalRequest(req) {
-  return !(req && req.connection.remoteAddress.indexOf("127.0.0.") < 0 && req.connection.remoteAddress != "::1");
-}
-
-function dbConnect() {
-  var defConnect = Q.defer();
-  pg.connect(_config.webapi.database, function(err, cli, release) {
-    if (err)
-      defConnect.reject(new Error(err));
-    else {
-      cli.release = release;
-      defConnect.resolve(cli);
-    }
-  });
-  return defConnect.promise;
-}
-
-function runServerBrowserQueryInternal(addr) {
-  var parts = addr.split(":");
-  var host = parts[0];
-  var port = (parts[1] ? parseInt(parts[1]) : 0) || 27960;
-
-  var def = Q.defer();
-  gsq({ type: "synergy", host: host, port: port }, function(state) { def.resolve(state); });
-  return def.promise
-    .then(function(state) {
-      return { ok: true, state: state };
-    });
-}
-
+// load skill ratings for all players from the database. data is chached for 1min
 function getSkillRatings() {
-  if (_getSkillRatingsCache.timestamp + 60 * 1000 > new Date().getTime())
-    return Q(_getSkillRatingsCache.data);
-  if (_getSkillRatingsCache.updatePromise !== null)
-    return _getSkillRatingsCache.updatePromise;
+  if (_getPlayerSkillratingsCache.timestamp + 60 * 1000 > new Date().getTime())
+    return Q(_getPlayerSkillratingsCache.data);
+  if (_getPlayerSkillratingsCache.updatePromise !== null)
+    return _getPlayerSkillratingsCache.updatePromise;
 
-  return _getSkillRatingsCache.updatePromise = dbConnect()
+  return _getPlayerSkillratingsCache.updatePromise = utils.dbConnect(_config.webapi.database)
     .then(function(cli) {
       return Q
         .ninvoke(cli, "query", { name: "serverskill", text: "select hashkey, game_type_cd, g2_r, g2_rd from hashkeys h inner join player_elos e on e.player_id=h.player_id where e.g2_games>=5" })
         .then(function(result) {
-          _getSkillRatingsCache.data = mapSkillInfo(result.rows);
-          _getSkillRatingsCache.timestamp = new Date().getTime();
-          return _getSkillRatingsCache.data;
+          _getPlayerSkillratingsCache.data = mapSkillInfo(result.rows);
+          _getPlayerSkillratingsCache.timestamp = new Date().getTime();
+          return _getPlayerSkillratingsCache.data;
         })
         .finally(function() {
           cli.release();
-          _getSkillRatingsCache.updatePromise = null;
+          _getPlayerSkillratingsCache.updatePromise = null;
         });
     });
 
@@ -382,6 +410,7 @@ function getSkillRatings() {
   }
 }
 
+// aggregate server status data from all stats tracking feeder processes
 function getAggregatedServerStatusData() {
   // bypass cache for single instance feeder/webadmin/webapi process
   if (_config.webapi.aggregatePanelPorts.length == 0 || _config.webapi.aggregatePanelPorts.length == 1 && _config.webapi.aggregatePanelPorts[0] == _config.httpd.port)
@@ -392,7 +421,6 @@ function getAggregatedServerStatusData() {
   if (_getAggregatedStatusDataCache.updatePromise !== null)
     return _getAggregatedStatusDataCache.updatePromise;
 
-  _getAggregatedStatusDataCache.updatePending = true;
   var aggregateInfo = DEBUG ? {} : getServerStatusdump();
   var tasks = [];
   _config.webapi.aggregatePanelPorts.forEach(function(port) {
@@ -421,6 +449,7 @@ function getAggregatedServerStatusData() {
   }
 }
 
+// request JSON from API of a stats tracking feeder process on another port
 function getJsonFromPort(port, route) {
   var defer = Q.defer();
   var ok = true;
@@ -441,4 +470,28 @@ function getJsonFromPort(port, route) {
     }).end();
 
   return defer.promise;
+}
+
+// aggregate server status data from all stats tracking feeder processes
+function getZmqFromGamePort() {
+  if (_getZmqFromGamePortCache.timestamp + 60 * 1000 > new Date().getTime())
+    return Q(_getZmqFromGamePortCache.data);
+  if (_getZmqFromGamePortCache.updatePromise !== null)
+    return _getZmqFromGamePortCache.updatePromise;
+
+  return _getZmqFromGamePortCache.updatePromise =
+    utils.dbConnect(_config.webapi.database)
+    .then(function(cli) {
+      return Q
+        .ninvoke(cli, "query", "select ip_addr, port, hashkey from servers")
+        .then(function(result) {
+          _getZmqFromGamePortCache = { timestamp: new Date().getTime(), data: {} };
+          result.rows.forEach(function(row) {
+            _getZmqFromGamePortCache.data[row.ip_addr + ":" + row.port] = row.hashkey;
+          });
+          return _getZmqFromGamePortCache.data;
+        })
+        .finally(function() { cli.release(); });
+    })
+    .finally(function() { _getZmqFromGamePortCache.updatePromise = null; });
 }

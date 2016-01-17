@@ -39,7 +39,8 @@ var
   Q = require("q"),
   express = require("express"),
   http = require("http"),
-  StatsConnection = require("./modules/statsconn");
+  StatsConnection = require("./modules/statsconn"),
+  utils = require("./modules/utils");
 
 var IpPortPassRegex = /^(?:([^:]*):)?((?:[0-9]{1,3}\.){3}[0-9]{1,3}):([0-9]+)(?:\/(.*))?$/; // IP:port/pass
 
@@ -209,8 +210,10 @@ function processFilesFromCommandLine(files) {
  */
 function startFeeder() {
   // connect to live zmq stats data feeds from QL game servers
-  if (!connectToServerList(_config.feeder.servers))
-    process.exit(1);
+  Q(connectToServerList(_config.feeder.servers))
+    .then(function(ok) {
+      if (!ok) process.exit(1);
+    });
 
   _logger.info("starting feeder");
 
@@ -398,22 +401,38 @@ function connectToServerList(servers) {
     conn = oldZmqConnections[addr];
     removeServer(conn);
   }
+  
+  if (deferredConnections.length == 0)
+    return true;
 
-  _statsConnections = newZmqConnections;
-
-  var count = 0;
-  try {
-    deferredConnections.forEach(function(conn) {
-      ++count;
-      addServer(conn.owner, conn.ip, conn.port, conn.pass);
+  return utils.dbConnect(_config.webapi.database)
+    .then(function (cli) {
+      return Q
+        .ninvoke(cli, "query", "select hashkey, port from servers")
+        .then(function(result) {
+          var gamePorts = {};
+          result.rows.forEach(function(row) {
+            gamePorts[row.hashkey] = row.port;
+          });
+          return gamePorts;
+        })
+        .finally(function() { cli.release(); });
+    })
+    .then(function(gamePorts) {
+      _statsConnections = newZmqConnections;
+      var count = 0;
+      try {
+        deferredConnections.forEach(function(conn) {
+          ++count;
+          addServer(conn.owner, conn.ip, conn.port, conn.pass, gamePorts[conn.ip + ":" + conn.port]);
+        });
+        return true;
+      }
+      catch (err) {
+        _logger.error("Failed creating ZMQ connection #" + count + ": " + err);
+        return false;
+      }
     });
-  }
-  catch (err) {
-    _logger.error("Failed creating ZMQ connection #" + count + ": " + err);
-    return false;
-  }
-
-  return true;
 }
 
 /**
@@ -422,16 +441,17 @@ function connectToServerList(servers) {
  * @param {string} ip 
  * @param {number} port 
  * @param {string} pass 
+ * @param {string} gamePort
  * @returns {?StatsConnection} The new connection object or null if there is already another connection for this server
  */
-function addServer(owner, ip, port, pass) {
+function addServer(owner, ip, port, pass, gamePort) {
   var addr = ip + ":" + port;
   if (_statsConnections[addr]) {
     _logger.error("Ignoring duplicate connection to " + addr);
     return null;
   }
 
-  var conn = StatsConnection.create(owner, ip, port, pass, onZmqMessageCallback);
+  var conn = StatsConnection.create(owner, ip, port, pass, onZmqMessageCallback, gamePort);
   conn.connect();
   _statsConnections[addr] = conn;
   return conn;

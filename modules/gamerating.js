@@ -4,7 +4,8 @@
   zlib = require("zlib"),
   glicko = require("./glicko1"),
   log4js = require("log4js"),
-  Q = require("q");
+  Q = require("q"),
+  utils = require("./utils");
 
 // calculate a value for "c" so that an average RD value of 85 changes back to 350 when a player is inactive for 180 rating periods (=days)
 const g2 = new glicko.Glicko({ rating: 1500, rd: 350, c: Math.sqrt((Math.pow(350, 2) - Math.pow(82, 2)) / 180) });
@@ -49,7 +50,7 @@ function init() {
 function rateAllGames(gt, options) {
   applyOptions(gt, options);
 
-  return dbConnect()
+  return utils.dbConnect(_config.webapi.database)
     .then(function(cli) {
       return resetRatingsInDb(cli)
         .then(function() { return loadPlayers(cli); })
@@ -79,7 +80,7 @@ function rateSingleGame(gameId, game) {
   var ratingPeriod = glickoPeriod(new Date(game.gameEndTimestamp * 1000));
   g2.setPeriod(ratingPeriod);
 
-  dbConnect()
+  utils.dbConnect(_config.webapi.database)
     .then(function(cli) {
       return Q()
         .then(function() { return strategy.isSupported ? loadPlayers(cli, steamIds) : []; })
@@ -111,7 +112,7 @@ function createGameTypeStrategy(gametype) {
   var ValidFactoriesForGametype = {
     "duel": ["duel", "qcon_duel"],
     "ffa": ["ffa", "mg_ffa_classic"],
-    "ca": ["ca", "capickup", "hoq_ca"],
+    "ca": ["ca", "capickup", "hoq_ca", "mg_ca_classic"],
     "tdm": ["ctdm", "qcon_tdm", "mg_tdm_fullclassic", "tdm_classic", "hoq_tdm"],
     "ctf": ["ctf", "ctf2", "qcon_ctf", "hoq_ctf"],
     "ft": ["freeze", "cftag", "ft", "ftclassic", "ft_classic", "mg_ft_fullclassic", "vft"]
@@ -151,19 +152,6 @@ function createGameTypeStrategy(gametype) {
     maxTeamTimeDiff: 1.05, // in a 4on4 game with 10 mins (or rounds) it will allow up to 42 player minutes in one team
     isDraw: IsDrawForGametype[gametype] || (function () { return false; })
   }
-}
-
-function dbConnect() {
-  var defConnect = Q.defer();
-  pg.connect(_config.webapi.database, function(err, cli, release) {
-    if (err)
-      defConnect.reject(new Error(err));
-    else {
-      cli.release = release;
-      defConnect.resolve(cli);
-    }
-  });
-  return defConnect.promise;
 }
 
 function resetRatingsInDb(cli) {

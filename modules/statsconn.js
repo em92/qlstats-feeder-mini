@@ -14,15 +14,15 @@ var WrongPasswordInterval = 5 * 1000; // when connection is closed within this i
 var _logger = {};
 _logger.trace = _logger.debug = _logger.info = _logger.warn = _logger.error = function (msg) { log(msg); }
 
-function create(owner, ip, port, pass, onZmqMessageCallback) {
-  return new StatsConnection(owner, ip, port, pass, onZmqMessageCallback);
+function create(owner, ip, port, pass, onZmqMessageCallback, gamePort) {
+  return new StatsConnection(owner, ip, port, pass, onZmqMessageCallback, gamePort);
 }
 
 function setLogger(logger) {
   _logger = logger;
 }
 
-function StatsConnection(owner, ip, port, pass, onZmqMessageCallback) {
+function StatsConnection(owner, ip, port, pass, onZmqMessageCallback, gamePort) {
   this.owner = owner;
   this.ip = ip;
   this.port = port;
@@ -42,6 +42,7 @@ function StatsConnection(owner, ip, port, pass, onZmqMessageCallback) {
   this.connectUtc = 0;
   
   // stuff for the webapi
+  this.gamePort = gamePort || port;
   this.players = {};
   this.gameType = null;
   this.factory = null;

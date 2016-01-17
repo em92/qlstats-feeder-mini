@@ -2,7 +2,9 @@
   bodyParser = require("body-parser"),
   fs = require("graceful-fs"),
   log4js = require("log4js"),
-  Q = require("q");
+  pg = require("pg"),
+  Q = require("q"),
+  utils = require("./utils");
 
 exports.init = init;
 
@@ -10,6 +12,7 @@ var MaxServersLowLimit = 150;
 var MaxServersHighLimit = 200;
 
 var _logger = log4js.getLogger("webadmin");
+var _config;
 
 // interface for communication with the feeder.node.js module
 var _feeder = {
@@ -20,6 +23,7 @@ var _feeder = {
 };
 
 function init(config, app, feeder) {
+  _config = config;
   _feeder = feeder;
   _logger.setLevel(config.webadmin.logLevel || "INFO");
 
@@ -45,8 +49,10 @@ function init(config, app, feeder) {
 
   app.post("/api/editserver", function (req, res) {
     _logger.info(req.connection.remoteAddress + ": /api/editserver " + JSON.stringify(req.body));
-    res.json(updateServers(req.body));
-    res.end();
+    Q(updateServers(req.body))
+      .then(function(obj) { res.json(obj); })
+      .catch(function(err) { res.json({ ok: false, msg: "internal error: " + err }); })
+      .finally(function() { res.end(); });
   });
 }
 
@@ -118,6 +124,7 @@ function addServer(req) {
 
   _feeder.addServer(req.owner, serverIp, serverPort, req.newPwd1);
   _feeder.writeConfig();
+
   return { ok: true, msg: "Added " + req.newAddr };
 }
 
@@ -152,7 +159,17 @@ function updateServers(req) {
 
     if (!serverIp)
       return { ok: false, msg: "Address change is only allowed for single IP or port" };
+    if (!serverPort && newPort)
+      return { ok: false, msg: "ZMQ port can only be changed for a single server" };
   }
+
+  if (req.newGamePort) {
+    if (!serverPort)
+      return { ok: false, msg: "Game port can only be set for a single server" };
+    if (!/\d+/.test(req.newGamePort))
+      return { ok: false, msg: "Game port must be blank or a number" };
+  } 
+  var gamePort = parseInt(req.newGamePort) || newPort || serverPort;
 
   var statsConn = _feeder.getStatsConnections();
 
@@ -203,14 +220,39 @@ function updateServers(req) {
       continue;
     }
 
-    if (req.newPwd1 || newIp || newPort) {
+    if (req.newPwd1 || newIp || newPort || gamePort) {
       _feeder.removeServer(conn);
-      _feeder.addServer(req.owner || conn.owner, newIp || conn.ip, newPort || conn.port, req.newPwd1 || conn.pass, newAddr);
+      _feeder.addServer(req.owner || conn.owner, newIp || conn.ip, newPort || conn.port, req.newPwd1 || conn.pass, newAddr, gamePort);
       result.msg += conn.addr + " updated\n";
     }
   }
 
   _feeder.writeConfig();
 
-  return result;
+  return utils.dbConnect(_config.webapi.database)
+    .then(function(cli) {
+      return Q()
+        .then(function() {
+          if (serverIp && !serverPort && newIp && newIp != serverIp) {
+            var data = [serverIp, newIp, newIp ];
+            return Q.ninvoke(cli, "query", "update servers set ip_addr=$2, hashkey=$3 || substring(hashkey from ':\\d+$') where ip_addr=$1", data);
+          }
+          return Q();
+        })
+        .then(function() {
+          if (serverPort && (newPort || gamePort)) {
+            var data = [ serverIp + ":" + serverPort, (newIp || serverIp) + ":" + (newPort || serverPort), gamePort];
+            return Q.ninvoke(cli, "query", "update servers set hashkey=$2, port=$3 where hashkey=$1", data);
+          }
+          return Q();
+        })
+        .then(function() {
+          return Q(result);
+        })
+        .catch(function(err) {
+          result.msg += "DB update error: " + err;
+          return Q(result);
+        })
+        .finally(function() { cli.release(); });
+    });
 }
