@@ -342,7 +342,10 @@ function getServerBrowserInfo(gameAddr) {
         var gt = (GameTypes[parseInt(state.raw.rules.g_gametype)] || "").toLowerCase();
         return _getServerBrowserInfoCache[gameAddr] = { time: new Date().getTime(), gt: gt, map: state.raw.rules.mapname };
       }
-      return _getServerBrowserInfoCache[gameAddr] = null;
+      return cached;
+    })
+    .finally(function() {
+      _getServerBrowserInfoCache[gameAddr].updatePromise = null;
     });
 }
 
