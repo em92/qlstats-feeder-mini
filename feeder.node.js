@@ -287,7 +287,7 @@ function processJsonFiles(files) {
   // serialize calls for each file
   return files.reduce(function(chain, file) {
     return chain.then(function (prevOk) {
-      feedJsonFile(file).then(function (ok) { return ok && prevOk; });
+      return feedJsonFile(file).then(function (ok) { return ok && prevOk; });
     });
   }, Q(true));
 
