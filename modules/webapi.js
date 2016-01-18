@@ -137,7 +137,7 @@ function getJson(req, res) {
   var options = {
     root: dir,
     dotfiles: "deny",
-    headers: asGzip ? {} : { "Content-Type": "application/json", "Content-Encoding": "gzip" }
+    headers: asGzip ? { } : { "Content-Type": "application/json; charset=utf-8", "Content-Encoding": "gzip" }
   };
   return Q.ninvoke(res, "sendFile", req.params.file + ".json.gz", options).catch(function() { return res.json({ ok: false, msg: "File not found" }) });
 }
