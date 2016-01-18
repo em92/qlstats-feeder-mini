@@ -12,7 +12,6 @@ function dbConnect(conn) {
   // see: https://github.com/brianc/node-postgres/issues/429#issuecomment-24870258
   if (!initialized) {
     pg.types.setTypeParser(1114, function (stringValue) {
-      console.log(stringValue);
       return new Date(Date.parse(stringValue + "+0000"));
     });
     initialized = true;
