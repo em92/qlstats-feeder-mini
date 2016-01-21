@@ -26,6 +26,7 @@ var _getServerBrowserInfoCache = { };
 var _getPlayerSkillratingsCache = { timestamp: 0, data: {}, updatePromise: null };
 var _getAggregatedStatusDataCache = { timestamp: 0, data: {}, updatePromise: null };
 var _getZmqFromGamePortCache = { timestamp: 0, data: {}, updatePromise: null };
+var _getProsNowPlayingCache = { timestamp: 0, data: {}, updatePromise: null }
 
 
 /**
@@ -93,6 +94,14 @@ function init(config, app, feeder) {
       .catch(function (err) { res.json({ ok: false, msg: "internal error: " + err }); })
       .finally(function () { res.end(); });
   });
+
+  app.get("/api/nowplaying", function(req, res) {
+    Q(getProsNowPlaying(req, res))
+      .then(function (obj) { res.json(obj); })
+      .catch(function (err) { res.json({ ok: false, msg: "internal error: " + err }); })
+      .finally(function () { res.end(); });
+  });
+
 }
 
 
@@ -306,7 +315,61 @@ function getARatedFactories() {
   return factories;
 }
 
+/**
+ * Get list of top 10 rated players for each game type currently in game
+ * @returns {gt:[{steamid,rating}]} 
+ */
+function getProsNowPlaying(req, res) {
+  res.set("Access-Control-Allow-Origin", "*");
+  var region = parseInt(req.query.region) || 0;
 
+  var now = new Date().getTime();
+  if (_getProsNowPlayingCache.timestamp + 15000 > now)
+    return _getProsNowPlayingCache.data;
+  if (_getProsNowPlayingCache.updatePromise != null)
+    return _getProsNowPlayingCache.updatePromise;
+
+  return _getProsNowPlayingCache.updatePromise = Q
+    .all([getAggregatedServerStatusData(), getSkillRatings()])
+    .then(function(results) {
+      var status = results[0];
+      var ratings = results[1];
+      var tops = {};
+      Object.keys(status).forEach(function(addr) {
+        var serverInfo = status[addr];
+        var gt = serverInfo.gt || (_getServerBrowserInfoCache[addr] || {})["gt"];
+        if (!gt) {
+          getServerBrowserInfo(addr); // TODO this and the line above should use game port instead of zmq port
+          return;
+        }
+        var top = tops[gt];
+        if (!top)
+          top = tops[gt] = [];
+        var player1;
+        Object.keys(serverInfo.p).forEach(function(steamid) {
+          var p = serverInfo.p[steamid];
+          var r = (ratings[steamid] || {})[gt] || { r:0, region: 0 };
+          if (p.team != 3 && !p.quit && (!region || r.region == region)) {
+            if (gt == "duel" && player1)
+              player1.opponent = { steamid: steamid, name: p.name, rating: r.r };
+            else
+              top.push(player1 = { steamid: steamid, name: p.name, rating: r.r, server: addr });
+          }
+        });
+      });
+
+      Object.keys(tops).forEach(function(gt) {
+        var top = tops[gt];
+        top.sort(function(a, b) { return b.rating - a.rating; });
+        tops[gt] = top.slice(0, 10);
+      });
+
+      return tops;
+    })
+    .finally(function() {
+      _getProsNowPlayingCache.updatePromise = null;
+    });
+}
 
 // helper functions
 
@@ -389,7 +452,7 @@ function getSkillRatings() {
   return _getPlayerSkillratingsCache.updatePromise = utils.dbConnect(_config.webapi.database)
     .then(function(cli) {
       return Q
-        .ninvoke(cli, "query", { name: "serverskill", text: "select hashkey, game_type_cd, g2_r, g2_rd from hashkeys h inner join player_elos e on e.player_id=h.player_id where e.g2_games>=5" })
+        .ninvoke(cli, "query", { name: "serverskill", text: "select hashkey, game_type_cd, g2_r, g2_rd, region from hashkeys h inner join player_elos e on e.player_id=h.player_id inner join players p on p.player_id=e.player_id where e.g2_games>=5" })
         .then(function(result) {
           _getPlayerSkillratingsCache.data = mapSkillInfo(result.rows);
           _getPlayerSkillratingsCache.timestamp = new Date().getTime();
@@ -407,7 +470,7 @@ function getSkillRatings() {
       var player = info[row.hashkey];
       if (!player)
         info[row.hashkey] = player = {};
-      player[row.game_type_cd] = { r: Math.round(row.g2_r), rd: Math.round(row.g2_rd) };
+      player[row.game_type_cd] = { r: Math.round(row.g2_r), rd: Math.round(row.g2_rd), region: row.region };
     });
     return info;
   }
