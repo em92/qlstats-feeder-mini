@@ -345,17 +345,26 @@ function getProsNowPlaying(req, res) {
         var top = tops[gt];
         if (!top)
           top = tops[gt] = [];
-        var player1;
+        var player1, player2;
         Object.keys(serverInfo.p).forEach(function(steamid) {
           var p = serverInfo.p[steamid];
           var r = (ratings[steamid] || {})[gt] || { r:0, region: 0 };
           if (p.team != 3 && !p.quit && (!region || r.region == region)) {
-            if (gt == "duel" && player1)
-              player1.opponent = { steamid: steamid, name: p.name, rating: r.r };
-            else
-              top.push(player1 = { steamid: steamid, name: p.name, rating: r.r, server: addr });
+            var player = { steamid: steamid, name: p.name, rating: r.r, server: addr };
+            if (!player1)
+              player1 = player;
+            else if (r.r > player1.rating) {
+              player2 = player1;
+              player1 = player;
+            }
+            else if (!player2 || r.r > player2.rating)
+              player2 = player;
           }
         });
+        if (player1) {
+          player1.opponent = player2;
+          top.push(player1);
+        }
       });
 
       Object.keys(tops).forEach(function(gt) {
