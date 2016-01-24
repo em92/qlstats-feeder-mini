@@ -7,8 +7,8 @@
   Q = require("q"),
   utils = require("./utils");
 
-// calculate a value for "c" so that an average RD value of 85 changes back to 350 when a player is inactive for 180 rating periods (=days)
-const g2 = new glicko.Glicko({ rating: 1500, rd: 350, c: Math.sqrt((Math.pow(350, 2) - Math.pow(82, 2)) / 180) });
+// calculate a value for "c" so that an average RD value of 30 changes back to 350 when a player is inactive for 720 rating periods (=days)
+const g2 = new glicko.Glicko({ rating: 1500, rd: 350, c: Math.sqrt((Math.pow(350, 2) - Math.pow(30, 2)) / 720) });
 
 // values for DB column games.g2_status
 const
@@ -183,7 +183,7 @@ function loadPlayers(cli, steamIds) {
   var params = [gametype];
   
   if (steamIds) {
-    query += " where h.hashkey in ('0'";
+    query += " where h.hashkey in ('-1'";
     steamIds.forEach(function(steamId, i) {
       query += ",$" + (i + 2);
       params.push(steamId);
@@ -400,7 +400,7 @@ function extractDataFromGameObject(game) {
 
       var pd = playerData[p.STEAM_ID];
       if (!pd) {
-        pd = { id: p.STEAM_ID, name: p.NAME, timeRed: 0, timeBlue: 0, roundsRed: 0, roundsBlue: 0, score: 0, k: 0, d: 0, dg: 0, dt: 0, a: 0, win: false };
+        pd = { id: p.STEAM_ID, name: p.NAME, timeRed: 0, timeBlue: 0, roundsRed: 0, roundsBlue: 0, score: 0, k: 0, d: 0, dg: 0, dt: 0, a: 0, win: false, quit: false };
         playerData[p.STEAM_ID] = pd;
       }
 
@@ -425,6 +425,8 @@ function extractDataFromGameObject(game) {
       pd.a += p.MEDALS.ASSISTS;
       if (p.RANK == 1)
         pd.win = true;
+      pd.quit |= p.QUIT;
+
       isTeamGame |= p.hasOwnProperty("TEAM");
     });
     
@@ -525,7 +527,7 @@ function calcPlayerPerformance(p, raw) {
     return ((p.k - p.d) * 5 + (p.dg - p.dt) / 100 * 4 + p.dg / 100 * 3) * timeFactor;
 
   if (gametype == "duel")
-    return p.score;
+    return p.quit ? -1 : p.win ? 1 : 0;
 
   // then use score/rounds for CA
   if (gametype == "ca")

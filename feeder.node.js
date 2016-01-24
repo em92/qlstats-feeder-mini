@@ -480,12 +480,13 @@ function onZmqMessageCallback(conn, data) {
   //fs.writeFileSync("temp/" + obj.TYPE.toLowerCase() + ".json", msg);
 
   if (obj.TYPE == "PLAYER_CONNECT")
-    setPlayerTeam(conn, obj.DATA, 3);
+    setPlayerTeam(conn, obj.DATA, 3).time = now;
   else if (obj.TYPE == "PLAYER_DISCONNECT") {
     var p = conn.players[obj.DATA.STEAM_ID];
     if (p) {
-      p.quit = true;
       updatePlayerPlayTime(p);
+      p.quit = true;
+      p.team = 3;
     }
   }
   else if (obj.TYPE == "PLAYER_SWITCHTEAM") {
@@ -553,10 +554,11 @@ function onZmqMessageCallback(conn, data) {
     player.team = Math.floor(teams.indexOf(team) / 2);
     player.name = playerData.NAME;
     player.quit = false;
+    return player;
   }
   
   function updatePlayerPlayTime(p) {
-    if (!p) return;
+    if (!p || p.quit) return;
     if ("ca,ft,ad".indexOf(conn.gameType || "-") >= 0) return;
     
     // for non-round-based games update playTimes immediately
@@ -607,12 +609,12 @@ function onZmqMessageCallback(conn, data) {
     conn.matchStartTime = 0;
     
     // save .json.gz and/or process the data for uploading it to xonstatdb
-    var tasks = [];
+    var chain = Q();
     if (_config.feeder.saveDownloadedJson)
-      tasks.push(saveGameJson(stats).catch(function (err) { _logger.error("failed saving .json.gz: " + err) }));
+      chain = chain.then(function() { return saveGameJson(stats).catch(function(err) { _logger.error("failed saving .json.gz: " + err) }) }); 
     if (_config.feeder.importDownloadedJson)
-      tasks.push(processGameData(stats).catch(function (err) { _logger.error("failed saving .json.gz: " + err) }));
-    Q.allSettled(tasks);   
+      chain = chain.then(function() { return processGameData(stats).catch(function(err) { _logger.error("failed processing match: " + err) }) });
+    return chain;
   }
 
   function getRoundsInformation(conn) {
