@@ -185,8 +185,10 @@ function getServerPlayers(req, res) {
       var serverinfo = calcServerInfo(zmqAddr, status, gt, ratings);
       return getServerBrowserInfo(gameAddr)
         .then(function(info) {
-          if (info)
-            serverinfo.map = info.map;
+          if (info) {
+            serverinfo.map = info.raw.rules.mapname;
+            serverinfo.mapstart = info.raw.rules.g_levelStartTime;
+          }
           return { ok: true, players: players, serverinfo: serverinfo };
         });
     });
@@ -412,7 +414,7 @@ function getServerBrowserInfo(gameAddr) {
     .then(function(state) {
       if (!state.error && state.raw && state.raw.rules) {
         var gt = (GameTypes[parseInt(state.raw.rules.g_gametype)] || "").toLowerCase();
-        return _getServerBrowserInfoCache[gameAddr] = { time: new Date().getTime(), gt: gt, map: state.raw.rules.mapname };
+        return _getServerBrowserInfoCache[gameAddr] = { time: new Date().getTime(), gt: gt, raw: state.raw };
       }
       return cached;
     })
@@ -448,7 +450,11 @@ function calcServerInfo(addr, serverStatus, gt, skillInfo) {
     maxRating = Math.max(maxRating, rating);
     minRating = Math.min(minRating, rating);
   }, []);
-  return { server: addr, gt: gt, min: count == 0 ? 0 : Math.round(minRating), avg: count == 0 ? 0 : Math.round(totalRating / count), max: Math.round(maxRating), pc: playerCount, sc: specCount, bc: botCount };  
+  return {
+    server: addr, gt: gt, 
+    min: count == 0 ? 0 : Math.round(minRating), avg: count == 0 ? 0 : Math.round(totalRating / count), max: Math.round(maxRating), 
+    pc: playerCount, sc: specCount, bc: botCount
+  };  
 }
 
 // load skill ratings for all players from the database. data is chached for 1min
