@@ -495,11 +495,12 @@ function onZmqMessageCallback(conn, data) {
     setPlayerTeam(conn, obj.DATA.KILLER);
   }
   else if (obj.TYPE == "PLAYER_KILL") {
-    setPlayerTeam(conn, obj.DATA.KILLER);
+    setPlayerTeam(conn, obj.DATA.KILLER).dead = false;
     setPlayerTeam(conn, obj.DATA.VICTIM);
   }
-  else if (obj.TYPE == "PLAYER_DEATH")
-    setPlayerTeam(conn, obj.DATA.VICTIM);
+  else if (obj.TYPE == "PLAYER_DEATH") {
+    setPlayerTeam(conn, obj.DATA.VICTIM).dead = true;
+  }
   else if (obj.TYPE == "MATCH_STARTED")
     onMatchStarted();
   else if (obj.TYPE == "ROUND_OVER")
@@ -528,6 +529,7 @@ function onZmqMessageCallback(conn, data) {
       p.time = now;
       p.playTimes = [0, 0, 0]; // time for team free, red, blue
       p.rounds = {}; // dict with round number => team number
+      p.dead = false;
     });
     conn.round = 1;
     conn.roundStartTime = now;
@@ -542,6 +544,7 @@ function onZmqMessageCallback(conn, data) {
       var p = conn.players[steamid];
       if (p.rounds[conn.round])
         p.playTimes[p.rounds[conn.round]] += duration; // add time to the team that the player played in this round (could be different team now)
+      p.dead = false;
     });
     
     ++conn.round;
@@ -553,7 +556,7 @@ function onZmqMessageCallback(conn, data) {
     var steamid = playerData.STEAM_ID;
     var player = conn.players[steamid];
     if (!player)
-      conn.players[steamid] = player = { team: -1, time: now, rounds: {}, quit: false, playTimes:[0,0,0] };
+      conn.players[steamid] = player = { team: -1, time: now, rounds: {}, quit: false, playTimes:[0,0,0], dead: false };
     var teams = [0, "FREE", 1, "RED", 2, "BLUE", 3, "SPECTATOR"];
     var team = overrideTeam !== undefined ? overrideTeam : playerData.TEAM;
     player.team = Math.floor(teams.indexOf(team) / 2);

@@ -203,6 +203,8 @@ function getServerPlayers(req, res) {
           if (info) {
             serverinfo.map = info.raw.rules.mapname;
             serverinfo.mapstart = info.raw.rules.g_levelStartTime;
+            if (!serverinfo.gt)
+              serverinfo.gt = (GameTypes[parseInt(info.raw.rules.g_gametype)] || "").toLowerCase();
           }
           return { ok: true, players: players, serverinfo: serverinfo };
         });
@@ -435,13 +437,30 @@ function getQtvEventStream(req, res) {
   var defer = Q.defer();
   conn.emitter.on('zmq', onZmq);
   res.on('close', removeListener);
-  return defer.promise;
+
+  var gameAddr = addr.substr(0, addr.indexOf(":") + 1) + conn.gamePort;
+  return getServerBrowserInfo(gameAddr)
+    .then(function(info) {
+      // send initial player status
+      var players = [];
+      Object.keys(conn.players).forEach(function(steamid) {
+        var p = conn.players[steamid];
+        players.push({ STEAM_ID: steamid, TEAM: p.team, DEAD: p.dead });
+      });
+      var gt = (GameTypes[parseInt(info.raw.rules.g_gametype)] || "").toLowerCase();
+      var init = { TYPE: "INIT", TIME: Math.floor(Date.now() / 1000), GAME_TYPE: gt, PLAYERS: players };
+      res.write("data:" + JSON.stringify(init) + "\n\n");
+
+      return defer.promise;
+  });
 
   function onZmq() {
     var msg = arguments[0];
     try {
       var event = null;
-      if (msg.TYPE == "PLAYER_SWITCHTEAM")
+      if (msg.TYPE == "PLAYER_CONNECT" || msg.TYPE == "PLAYER_DISCONNECT")
+        event = { STEAM_ID: msg.DATA.STEAM_ID }
+      else if (msg.TYPE == "PLAYER_SWITCHTEAM")
         event = { STEAM_ID: msg.DATA.KILLER.STEAM_ID, TEAM: msg.DATA.KILLER.TEAM };
       else if (msg.TYPE == "PLAYER_DEATH")
         event = { STEAM_ID: msg.DATA.VICTIM.STEAM_ID, WARMUP: msg.DATA.WARMUP };
@@ -453,7 +472,6 @@ function getQtvEventStream(req, res) {
         event.TIME = Math.floor(Date.now() / 1000);
         var text = "data:" + JSON.stringify(event) + "\n\n";
         res.write(text);
-        
       }
     }
     catch (err) {
@@ -645,7 +663,7 @@ function getJsonFromPort(port, route) {
 function getZmqFromGamePort() {
   if (_getZmqFromGamePortCache.timestamp + 60 * 1000 > Date.now())
     return Q(_getZmqFromGamePortCache.data);
-  if (_getZmqFromGamePortCache.updatePromise !== null)
+  if (_getZmqFromGamePortCache.updatePromise)
     return _getZmqFromGamePortCache.updatePromise;
 
   return _getZmqFromGamePortCache.updatePromise =
