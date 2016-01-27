@@ -432,10 +432,9 @@ function getQtvEventStream(req, res) {
     return { ok: false, msg: "No ZMQ connection to " + addr };
   
   res.set("Content-Type", "text/event-stream; charset=utf-8");
+  res.on('close', removeListener);
 
   var defer = Q.defer();
-  conn.emitter.on('zmq', onZmq);
-  res.on('close', removeListener);
 
   var gameAddr = addr.substr(0, addr.indexOf(":") + 1) + conn.gamePort;
   return getServerBrowserInfo(gameAddr)
@@ -449,6 +448,8 @@ function getQtvEventStream(req, res) {
       var gt = info.gt || conn.gameType;
       var init = { TYPE: "INIT", TIME: Math.floor(Date.now() / 1000), GAME_TYPE: gt, PLAYERS: players };
       res.write("data:" + JSON.stringify(init) + "\n\n");
+    
+      conn.emitter.on('zmq', onZmq);
 
       return defer.promise;
   });
