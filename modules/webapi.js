@@ -479,7 +479,7 @@ function isInternalRequest(req) {
 function getServerBrowserInfo(gameAddr) {
   var cached = _getServerBrowserInfoCache[gameAddr];
   if (!cached)
-    cached = _getServerBrowserInfoCache[gameAddr] = { time: 0 };
+    cached = _getServerBrowserInfoCache[gameAddr] = { time: 0, raw: { rules: {}, players: [] } };
   else if (cached.time + 10 * 1000 >= new Date().getTime())
     return Q(cached);
   else if (cached.updatePromise != null)
