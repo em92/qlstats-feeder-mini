@@ -421,6 +421,7 @@ function connectToServerList(servers) {
         .finally(function() { cli.release(); });
     })
     .then(function(gamePorts) {
+      _statsConnections = newZmqConnections;
       var count = 0;
       try {
         deferredConnections.forEach(function(conn) {
@@ -433,9 +434,6 @@ function connectToServerList(servers) {
         _logger.error("Failed creating ZMQ connection #" + count + ": " + err);
         return false;
       }
-    })
-    .finally(function() {
-      _statsConnections = newZmqConnections;
     });
 }
 
