@@ -1,4 +1,5 @@
-﻿zmq = require("zmq");
+﻿var zmq = require("zmq");
+var events = require("events");
 
 exports.create = create;
 exports.setLogger = setLogger;
@@ -51,6 +52,7 @@ function StatsConnection(owner, ip, port, pass, onZmqMessageCallback, gamePort) 
   this.round = 0;
   this.roundStartTime = 0;
   this.roundDurations = [];
+  this.emitter = new events.EventEmitter();
 }
 
 StatsConnection.prototype.connect = function (isReconnect) {

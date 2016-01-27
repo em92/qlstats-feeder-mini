@@ -510,8 +510,13 @@ function onZmqMessageCallback(conn, data) {
   }
   else if (obj.TYPE == "MATCH_REPORT")
     onMatchReport();
-  
-  
+
+  try {
+    conn.emitter.emit('zmq', obj);
+  }
+  catch (err) {
+  }
+
   function onMatchStarted() {
     _logger.debug(conn.addr + ": match started");
     conn.matchStartTime = now;

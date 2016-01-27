@@ -5,6 +5,7 @@
   request = require("request"),
   gsq = require("game-server-query"),
   Q = require("q"),
+  events = require("events"),
   gr = require("./gamerating"),
   utils = require("./utils");
 
@@ -102,6 +103,19 @@ function init(config, app, feeder) {
       .finally(function () { res.end(); });
   });
 
+  app.get("/api/qtv/:addr/url", function (req, res) {
+    Q(getQtvEventStreamUrl(req, res))
+      .then(function (obj) { res.json(obj); })
+      .catch(function (err) { res.json({ ok: false, msg: "internal error: " + err }); })
+      .finally(function () { res.end(); });
+  });
+
+  app.get("/api/qtv/:addr/stream", function (req, res) {
+    Q(getQtvEventStream(req, res))
+      .then(function (obj) { res.json(obj); })
+      .catch(function (err) { res.json({ ok: false, msg: "internal error: " + err }); })
+      .finally(function () { res.end(); });
+  });
 }
 
 
@@ -297,7 +311,7 @@ function getServerStatusdump(req) {
   addrs.forEach(function(addr) {
     var conn = conns[addr];
     if (!conn.connected) return;
-    info[addr] = { gp: conn.gamePort, gt: conn.gameType, f: conn.factory, p: conn.players };
+    info[addr] = { gp: conn.gamePort, gt: conn.gameType, f: conn.factory, p: conn.players, api: _config.httpd.port };
   });
   return info;
 }
@@ -381,6 +395,75 @@ function getProsNowPlaying(req, res) {
       _getProsNowPlayingCache.updatePromise = null;
     });
 }
+
+
+/**
+ * Get the URL of the ZMQ event stream for the specified server ip:gameport
+ * @returns {bool ok, string streamUrl}
+ */
+function getQtvEventStreamUrl(req, res) {
+  res.set("Access-Control-Allow-Origin", "*");
+  var addr = req.params.addr;
+  return Q.all([getAggregatedServerStatusData(), getZmqFromGamePort()])
+    .then(function(data) {
+      var status = data[0];
+      var portMap = data[1];
+      var zmqAddr = portMap[addr] || addr;
+      var api = status[zmqAddr].api;
+      return { ok: true, streamUrl: req.protocol + "://" + req.hostname + ":" + api + "/api/qtv/" + zmqAddr + "/stream" };
+    });
+}
+
+
+/**
+ * Steaming HTTP response with JSONs about game events
+ */
+function getQtvEventStream(req, res) {
+  res.set("Access-Control-Allow-Origin", "*");
+  
+  var addr = req.params.addr;
+
+  var conn = _feeder.getStatsConnections()[addr];
+  if (!conn)
+    return { ok: false, msg: "No ZMQ connection to " + addr };
+  
+  res.set("Content-Type", "text/event-stream; charset=utf-8");
+
+  var defer = Q.defer();
+  conn.emitter.on('zmq', onZmq);
+  res.on('close', removeListener);
+  return defer.promise;
+
+  function onZmq() {
+    var msg = arguments[0];
+    try {
+      var event = null;
+      if (msg.TYPE == "PLAYER_SWITCHTEAM")
+        event = { STEAM_ID: msg.DATA.KILLER.STEAM_ID, TEAM: msg.DATA.KILLER.TEAM };
+      else if (msg.TYPE == "PLAYER_DEATH")
+        event = { STEAM_ID: msg.DATA.VICTIM.STEAM_ID, WARMUP: msg.DATA.WARMUP };
+      else if (msg.TYPE == "ROUND_OVER" || msg.TYPE == "MATCH_REPORT")
+        event = { };
+      
+      if (event) {
+        event.TYPE = msg.TYPE;
+        event.TIME = Math.floor(Date.now() / 1000);
+        var text = "data:" + JSON.stringify(event) + "\n\n";
+        res.write(text);
+        
+      }
+    }
+    catch (err) {
+      removeListener();
+      defer.resolve();
+    }
+  }
+
+  function removeListener() {
+    conn.emitter.removeListener('zmq', onZmq);    
+  }
+}
+
 
 // helper functions
 
