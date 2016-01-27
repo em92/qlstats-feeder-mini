@@ -610,7 +610,7 @@ function onZmqMessageCallback(conn, data) {
     };
     conn.playerStats = [];
     Object.keys(conn.players).forEach(function (steamid) {
-      if (conn.players[steamid].quit || conn.players[steamid].lastMsg + 2 * 3600 * 1000 >= now)
+      if (conn.players[steamid].quit || conn.players[steamid].lastMsg + 2 * 3600 * 1000 < now)
         delete conn.players[steamid];
     });
     

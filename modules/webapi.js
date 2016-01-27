@@ -179,7 +179,7 @@ function getServerPlayers(req, res) {
   if (!gameAddr) return { ok: false, msg: "No server address specified" };
 
   return Q.all([getAggregatedServerStatusData(), getSkillRatings(), getZmqFromGamePort()])
-    .then(function (info) {
+    .then(function(info) {
       var serverStatus = info[0];
       var ratings = info[1];
       var portMapping = info[2];
@@ -187,24 +187,22 @@ function getServerPlayers(req, res) {
       var status = serverStatus[zmqAddr];
       if (!status) return { ok: false, msg: "Server is not being tracked" };
 
-      var gt = status.gt || (_getServerBrowserInfoCache[gameAddr] || {})["gt"];
-      var keys = status.p ? Object.keys(status.p) : [];
-      var players = keys.reduce(function(result, steamid) {
-        var player = status.p[steamid];
-        if (!player.quit) {
-          var rating = gt && ratings && ratings[steamid] ? ratings[steamid][gt] || {} : {};
-          result.push({ steamid: steamid, name: player.name, team: player.team, rating: rating.r, rd: rating.rd, time: player.time });
-        }
-        return result;
-      }, []);
-      var serverinfo = calcServerInfo(zmqAddr, status, gt, ratings);
       return getServerBrowserInfo(gameAddr)
         .then(function(info) {
+          var gt = info.gt || status.gt;
+          var keys = status.p ? Object.keys(status.p) : [];
+          var players = keys.reduce(function(result, steamid) {
+            var player = status.p[steamid];
+            if (!player.quit) {
+              var rating = gt && ratings && ratings[steamid] ? ratings[steamid][gt] || {} : {};
+              result.push({ steamid: steamid, name: player.name, team: player.team, rating: rating.r, rd: rating.rd, time: player.time });
+            }
+            return result;
+          }, []);
+          var serverinfo = calcServerInfo(zmqAddr, status, gt, ratings);
           if (info) {
             serverinfo.map = info.raw.rules.mapname;
             serverinfo.mapstart = info.raw.rules.g_levelStartTime;
-            if (!serverinfo.gt)
-              serverinfo.gt = (GameTypes[parseInt(info.raw.rules.g_gametype)] || "").toLowerCase();
           }
           return { ok: true, players: players, serverinfo: serverinfo };
         });
@@ -421,7 +419,8 @@ function getQtvEventStreamUrl(req, res) {
 
 
 /**
- * Steaming HTTP response with JSONs about game events
+ * Steaming HTTP response with JSONs about game events.
+ * This API method must be called from the same feeder port that is tracking the server (and not from the aggregated API host)
  */
 function getQtvEventStream(req, res) {
   res.set("Access-Control-Allow-Origin", "*");
@@ -447,7 +446,7 @@ function getQtvEventStream(req, res) {
         var p = conn.players[steamid];
         players.push({ STEAM_ID: steamid, TEAM: p.team, DEAD: p.dead });
       });
-      var gt = (GameTypes[parseInt(info.raw.rules.g_gametype)] || "").toLowerCase();
+      var gt = info.gt || conn.gameType;
       var init = { TYPE: "INIT", TIME: Math.floor(Date.now() / 1000), GAME_TYPE: gt, PLAYERS: players };
       res.write("data:" + JSON.stringify(init) + "\n\n");
 
