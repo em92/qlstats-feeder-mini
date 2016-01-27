@@ -277,11 +277,12 @@ function getServerSkillrating() {
     var delay = 0;
     addrs.forEach(function(addr) {
       var conn = serverStatus[addr];
-      var gt = conn.gt || (_getServerBrowserInfoCache[addr] || {})["gt"];
+      var gameAddr = conn.gp ? addr.substr(0, addr.indexOf(":") + 1) + conn.gp : addr;
+      var gt = conn.gt || (_getServerBrowserInfoCache[gameAddr] || {})["gt"];
       if (!gt) {
         // execute browser query in the background and put the result in the cache for the next call to this API
-        Q.delay(delay += 100).then(function() {
-          getServerBrowserInfo(addr);
+        Q.delay(delay += 10).then(function() {
+          getServerBrowserInfo(gameAddr);
         }).catch();
         return;
       }
