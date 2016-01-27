@@ -401,12 +401,14 @@ function connectToServerList(servers) {
     conn = oldZmqConnections[addr];
     removeServer(conn);
   }
-  
-  if (deferredConnections.length == 0)
+
+  if (deferredConnections.length == 0) {
+    _statsConnections = newZmqConnections;
     return true;
+  }
 
   return utils.dbConnect(_config.webapi.database)
-    .then(function (cli) {
+    .then(function(cli) {
       return Q
         .ninvoke(cli, "query", "select hashkey, port from servers")
         .then(function(result) {
@@ -419,7 +421,6 @@ function connectToServerList(servers) {
         .finally(function() { cli.release(); });
     })
     .then(function(gamePorts) {
-      _statsConnections = newZmqConnections;
       var count = 0;
       try {
         deferredConnections.forEach(function(conn) {
@@ -432,6 +433,9 @@ function connectToServerList(servers) {
         _logger.error("Failed creating ZMQ connection #" + count + ": " + err);
         return false;
       }
+    })
+    .finally(function() {
+      _statsConnections = newZmqConnections;
     });
 }
 
