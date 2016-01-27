@@ -333,7 +333,7 @@ function getARatedFactories() {
 }
 
 /**
- * Get list of top 10 rated players for each game type currently in game
+ * Get list of 10 top rated matches for each game type
  * @returns {gt:[{steamid,rating}]} 
  */
 function getProsNowPlaying(req, res) {
@@ -354,9 +354,10 @@ function getProsNowPlaying(req, res) {
       var tops = {};
       Object.keys(status).forEach(function(addr) {
         var serverInfo = status[addr];
-        var gt = serverInfo.gt || (_getServerBrowserInfoCache[addr] || {})["gt"];
+        var gameAddr = serverInfo.gp ? addr.substr(0, addr.indexOf(":") + 1) + serverInfo.gp : addr;
+        var gt = serverInfo.gt || (_getServerBrowserInfoCache[gameAddr] || {})["gt"];
         if (!gt) {
-          getServerBrowserInfo(addr); // TODO this and the line above should use game port instead of zmq port
+          getServerBrowserInfo(gameAddr);
           return;
         }
         var top = tops[gt];
@@ -367,7 +368,7 @@ function getProsNowPlaying(req, res) {
           var p = serverInfo.p[steamid];
           var r = (ratings[steamid] || {})[gt] || { r:0, region: 0 };
           if (p.team != 3 && !p.quit && (!region || r.region == region)) {
-            var player = { steamid: steamid, name: p.name, rating: r.r, server: addr };
+            var player = { steamid: steamid, name: p.name, rating: r.r, server: gameAddr };
             if (!player1)
               player1 = player;
             else if (r.r > player1.rating) {
