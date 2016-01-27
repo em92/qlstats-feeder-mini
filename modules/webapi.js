@@ -255,7 +255,7 @@ function locatePlayer(req, res) {
  * @returns data or promise for [{server, gt, min, avg, max, pc, sc, bc}]
  */
 function getServerSkillrating() {
-  var now = new Date().getTime();
+  var now = Date.now();
   if (_getServerSkillratingCache.timestamp + 15000 > now)
     return _getServerSkillratingCache.data;
   if (_getServerSkillratingCache.updatePromise != null)
@@ -340,7 +340,7 @@ function getProsNowPlaying(req, res) {
   res.set("Access-Control-Allow-Origin", "*");
   var region = parseInt(req.query.region) || 0;
 
-  var now = new Date().getTime();
+  var now = Date.now();
   if (_getProsNowPlayingCache.timestamp + 15000 > now)
     return _getProsNowPlayingCache.data;
   if (_getProsNowPlayingCache.updatePromise != null)
@@ -480,9 +480,9 @@ function getServerBrowserInfo(gameAddr) {
   var cached = _getServerBrowserInfoCache[gameAddr];
   if (!cached)
     cached = _getServerBrowserInfoCache[gameAddr] = { time: 0, raw: { rules: {}, players: [] } };
-  else if (cached.time + 10 * 1000 >= new Date().getTime())
+  else if (cached.time + 10 * 1000 >= Date.now())
     return Q(cached);
-  else if (cached.updatePromise != null)
+  else if (cached.updatePromise)
     return cached.updatePromise;
 
   var parts = gameAddr.split(":");
@@ -491,19 +491,21 @@ function getServerBrowserInfo(gameAddr) {
 
   
   var def = Q.defer();
+  _logger.debug("getting server browser information for " + gameAddr);
   gsq({ type: "synergy", host: host, port: gamePort }, function(state) { def.resolve(state); });
   
   return cached.updatePromise = 
     def.promise
     .then(function(state) {
+      _logger.debug("received server browser information for " + gameAddr + ": state.error=" + state.error + ", map=" + ((state.raw||{}).rules||{}).mapname);
       if (!state.error && state.raw && state.raw.rules) {
         var gt = (GameTypes[parseInt(state.raw.rules.g_gametype)] || "").toLowerCase();
-        return _getServerBrowserInfoCache[gameAddr] = { time: new Date().getTime(), gt: gt, raw: state.raw };
+        return _getServerBrowserInfoCache[gameAddr] = { time: Date.now(), gt: gt, raw: state.raw };
       }
       return cached;
     })
     .finally(function() {
-      _getServerBrowserInfoCache[gameAddr].updatePromise = null;
+      cached.updatePromise = null;
     });
 }
 
@@ -543,7 +545,7 @@ function calcServerInfo(addr, serverStatus, gt, skillInfo) {
 
 // load skill ratings for all players from the database. data is chached for 1min
 function getSkillRatings() {
-  if (_getPlayerSkillratingsCache.timestamp + 60 * 1000 > new Date().getTime())
+  if (_getPlayerSkillratingsCache.timestamp + 60 * 1000 > Date.now())
     return Q(_getPlayerSkillratingsCache.data);
   if (_getPlayerSkillratingsCache.updatePromise !== null)
     return _getPlayerSkillratingsCache.updatePromise;
@@ -554,7 +556,7 @@ function getSkillRatings() {
         .ninvoke(cli, "query", { name: "serverskill", text: "select hashkey, game_type_cd, g2_r, g2_rd, region from hashkeys h inner join player_elos e on e.player_id=h.player_id inner join players p on p.player_id=e.player_id where e.g2_games>=5" })
         .then(function(result) {
           _getPlayerSkillratingsCache.data = mapSkillInfo(result.rows);
-          _getPlayerSkillratingsCache.timestamp = new Date().getTime();
+          _getPlayerSkillratingsCache.timestamp = Date.now();
           return _getPlayerSkillratingsCache.data;
         })
         .finally(function() {
@@ -581,7 +583,7 @@ function getAggregatedServerStatusData() {
   if (_config.webapi.aggregatePanelPorts.length == 0 || _config.webapi.aggregatePanelPorts.length == 1 && _config.webapi.aggregatePanelPorts[0] == _config.httpd.port)
     return getServerStatusdump();
 
-  if (_getAggregatedStatusDataCache.timestamp + 5 * 1000 > new Date().getTime())
+  if (_getAggregatedStatusDataCache.timestamp + 5 * 1000 > Date.now())
     return Q(_getAggregatedStatusDataCache.data);
   if (_getAggregatedStatusDataCache.updatePromise !== null)
     return _getAggregatedStatusDataCache.updatePromise;
@@ -597,7 +599,7 @@ function getAggregatedServerStatusData() {
     .all(tasks)
     .then(function() {
       _getAggregatedStatusDataCache.data = aggregateInfo;
-      _getAggregatedStatusDataCache.timestamp = new Date().getTime();
+      _getAggregatedStatusDataCache.timestamp = Date.now();
       return aggregateInfo;
     })
     .finally(function() { _getAggregatedStatusDataCache.updatePromise = null; });
@@ -639,7 +641,7 @@ function getJsonFromPort(port, route) {
 
 // aggregate server status data from all stats tracking feeder processes
 function getZmqFromGamePort() {
-  if (_getZmqFromGamePortCache.timestamp + 60 * 1000 > new Date().getTime())
+  if (_getZmqFromGamePortCache.timestamp + 60 * 1000 > Date.now())
     return Q(_getZmqFromGamePortCache.data);
   if (_getZmqFromGamePortCache.updatePromise !== null)
     return _getZmqFromGamePortCache.updatePromise;
@@ -650,7 +652,7 @@ function getZmqFromGamePort() {
       return Q
         .ninvoke(cli, "query", "select ip_addr, port, hashkey from servers")
         .then(function(result) {
-          _getZmqFromGamePortCache = { timestamp: new Date().getTime(), data: {} };
+          _getZmqFromGamePortCache = { timestamp: Date.now(), data: {} };
           result.rows.forEach(function(row) {
             _getZmqFromGamePortCache.data[row.ip_addr + ":" + row.port] = row.hashkey;
           });
