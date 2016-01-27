@@ -56,6 +56,13 @@ function init(config, app, feeder) {
       .catch(function (err) { res.json({ ok: false, msg: "internal error: " + err }); })
       .finally(function () { res.end(); });
   });
+  
+  app.get("/api/qtv/:addr/stream", function (req, res) {
+    Q(getQtvEventStream(req, res))
+      .then(function (obj) { res.json(obj); })
+      .catch(function (err) { res.json({ ok: false, msg: "internal error: " + err }); })
+      .finally(function () { res.end(); });
+  });
 
   if (!_config.webapi.enabled)
     return;
@@ -110,12 +117,6 @@ function init(config, app, feeder) {
       .finally(function () { res.end(); });
   });
 
-  app.get("/api/qtv/:addr/stream", function (req, res) {
-    Q(getQtvEventStream(req, res))
-      .then(function (obj) { res.json(obj); })
-      .catch(function (err) { res.json({ ok: false, msg: "internal error: " + err }); })
-      .finally(function () { res.end(); });
-  });
 }
 
 
