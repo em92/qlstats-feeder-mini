@@ -449,6 +449,7 @@ function getQtvEventStream(req, res) {
       var init = { TYPE: "INIT", TIME: Math.floor(Date.now() / 1000), GAME_TYPE: gt, PLAYERS: players };
       res.write("data:" + JSON.stringify(init) + "\n\n");
     
+      // relay incoming ZMQ events to listener
       conn.emitter.on('zmq', onZmq);
 
       return defer.promise;
@@ -512,7 +513,7 @@ function getServerBrowserInfo(gameAddr) {
   
   var def = Q.defer();
   _logger.debug("getting server browser information for " + gameAddr);
-  gsq({ type: "synergy", host: host, port: gamePort }, function(state) { def.resolve(state); });
+  gsq({ type: "synergy", host: host, port: gamePort, localPort: _config.httpd.port }, function(state) { def.resolve(state); });
   
   return cached.updatePromise = 
     def.promise
