@@ -465,7 +465,7 @@ function getQtvEventStream(req, res) {
         event = { STEAM_ID: msg.DATA.KILLER.STEAM_ID, TEAM: msg.DATA.KILLER.TEAM };
       else if (msg.TYPE == "PLAYER_DEATH")
         event = { STEAM_ID: msg.DATA.VICTIM.STEAM_ID, WARMUP: msg.DATA.WARMUP };
-      else if (msg.TYPE == "ROUND_OVER" || msg.TYPE == "MATCH_REPORT")
+      else if (msg.TYPE == "MATCH_STARTED" || msg.TYPE == "ROUND_OVER" || msg.TYPE == "MATCH_REPORT")
         event = { };
       
       if (event) {
