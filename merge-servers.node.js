@@ -2,7 +2,7 @@
   fs = require("graceful-fs"), 
   pg = require("pg"),
   Q = require("q"),
-  util = require("./modules/utils")
+  utils = require("./modules/utils")
 
 var _config;
 
