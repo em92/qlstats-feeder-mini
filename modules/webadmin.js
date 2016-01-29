@@ -8,8 +8,8 @@
 
 exports.init = init;
 
-var MaxServersLowLimit = 150;
-var MaxServersHighLimit = 200;
+var MaxServersLowLimit = 250;
+var MaxServersHighLimit = 340;
 
 var _logger = log4js.getLogger("webadmin");
 var _config;
