@@ -1,4 +1,5 @@
 ﻿var 
+  fs = require("graceful-fs"), 
   pg = require("pg"),
   Q = require("q"),
   util = require("./modules/utils")
