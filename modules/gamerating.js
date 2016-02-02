@@ -574,14 +574,14 @@ function savePlayerRatings(cli, isFunMod) {
 
   var update, insert, updateName = "elo_upd", insertName = "elo_ins";
   if (isFunMod) {
-    update = "update player_elos set b_games=$3, b_r=$4, b_rd=$5, b_dt=$6 where player_id=$1 and game_type_cd=$2";
-    insert = "insert into player_elos (player_id, game_type_cd, b_games, b_r, b_rd, b_dt, elo) values ($1,$2,$3,$4,$5,$6, 100)";
+    update = "update player_elos set b_games=$3, b_r=$4, b_rd=$5, b_dt=$6, update_dt=now() at time zone 'utc' where player_id=$1 and game_type_cd=$2";
+    insert = "insert into player_elos (player_id, game_type_cd, b_games, b_r, b_rd, b_dt, update_dt, elo) values ($1,$2,$3,$4,$5,$6,now() at time zone 'utc', 100)";
     updateName += "_b";
     insertName += "_b";
   }
   else {
-    update = "update player_elos set g2_games=$3, g2_r=$4, g2_rd=$5, g2_dt=$6 where player_id=$1 and game_type_cd=$2";
-    insert = "insert into player_elos (player_id, game_type_cd, g2_games, g2_r, g2_rd, g2_dt, elo) values ($1,$2,$3,$4,$5,$6, 100)";
+    update = "update player_elos set g2_games=$3, g2_r=$4, g2_rd=$5, g2_dt=$6, update_dt=now() at time zone 'utc' where player_id=$1 and game_type_cd=$2";
+    insert = "insert into player_elos (player_id, game_type_cd, g2_games, g2_r, g2_rd, g2_dt, update_dt, elo) values ($1,$2,$3,$4,$5,$6,now() at time zone 'utc', 100)";
   }
 
   return list.reduce(function(chain, player) {
