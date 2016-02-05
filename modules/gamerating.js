@@ -35,6 +35,7 @@ var recalcFactories;
 var strategy;
 var playersBySteamId = {};
 var _lastProcessedMatchStartDt;
+var rateSingleGameQueue = Q();
 
 exports.rateAllGames = rateAllGames;
 exports.rateSingleGame = rateSingleGame;
@@ -68,6 +69,11 @@ function rateAllGames(gt, options) {
 }
 
 function rateSingleGame(gameId, game) {
+  // since this module has state variables for the rating process, all rating requests muss be executed sequentially to avoid mutual interference
+  rateSingleGameQueue = (Q.isFulfilled(rateSingleGameQueue) ? Q() : rateSingleGameQueue).then(function () { return rateSingleGameCore(gameId, game); });
+}
+
+function rateSingleGameCore(gameId, game) {
   var gt = game.matchStats.GAME_TYPE;
   applyOptions(gt, { resetRating: false, updateDatabase: true, onlyProcessMatchesBefore: null, printResult: false });
 
