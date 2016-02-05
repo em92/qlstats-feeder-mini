@@ -597,7 +597,7 @@ function savePlayerRatings(cli, isFunMod) {
         // try update and if rowcount is 0, execute an insert
         return Q.ninvoke(cli, "query", { name: updateName, text: update, values: val })
           .then(function(result) {
-            if (result.rowCount == 1) return Q();
+            if (result.rowCount == 1 || !player.id) return Q();
             return Q.ninvoke(cli, "query", { name: insertName, text: insert, values: val })
               .catch(function(err) { _logger.error("Failed to insert/update player_elo: steam-id=" + player.id + ", data=" + JSON.stringify(val) + ", name=" + player.name + ":\n" + err); });
           });
