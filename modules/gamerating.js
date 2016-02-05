@@ -86,7 +86,7 @@ function rateSingleGameCore(gameId, game) {
   var ratingPeriod = glickoPeriod(new Date(game.gameEndTimestamp * 1000));
   g2.setPeriod(ratingPeriod);
 
-  utils.dbConnect(_config.webapi.database)
+  return utils.dbConnect(_config.webapi.database)
     .then(function(cli) {
       return Q()
         .then(function() { return strategy.isSupported ? loadPlayers(cli, steamIds) : []; })
