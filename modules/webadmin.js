@@ -222,7 +222,7 @@ function updateServers(req) {
 
     if (req.newPwd1 || newIp || newPort || gamePort) {
       _feeder.removeServer(conn);
-      _feeder.addServer(req.owner || conn.owner, newIp || conn.ip, newPort || conn.port, req.newPwd1 || conn.pass, newAddr, gamePort);
+      _feeder.addServer(req.owner || conn.owner, newIp || conn.ip, newPort || conn.port, req.newPwd1 || conn.pass, gamePort);
       result.msg += conn.addr + " updated\n";
     }
   }
