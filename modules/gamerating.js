@@ -470,10 +470,11 @@ function extractDataFromGameObject(game) {
       if (pd.dg < 500 || pd.dt / pd.dg >= 10.0) // skip AFK players
         continue;
       
-      if (!pd.active) // ignore deactivated players (i.e. cheaters)
-        continue;
 
-      getOrAddPlayer(null, pd.id, pd.name).played = true;
+      var p = getOrAddPlayer(null, pd.id, pd.name);
+      if (!p.active) // ignore deactivated players (i.e. cheaters)
+        continue;     
+      p.played = true;
 
       if (isTeamGame) {
         var winningTeam = game.matchStats.TSCORE0 > game.matchStats.TSCORE1 ? -1 : game.matchStats.TSCORE0 == game.matchStats.TSCORE1 ? 0 : +1;
