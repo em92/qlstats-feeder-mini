@@ -503,9 +503,10 @@ function isInternalRequest(req) {
 function resolveServerAddr(addr) {
   var idx = addr.indexOf(":");
   var ipOrHost = idx < 0 ? addr : addr.substr(0, idx);
+  var port = idx < 0 ? ":27960" : addr.substr(idx);
   var match = /^([\d.]+)/.exec(ipOrHost);
   if (match)
-    return Q(addr);
+    return Q(ipOrHost + port);
 
   var defer = Q.defer();
   dns.lookup(ipOrHost, 4, function(err, address) {
@@ -514,7 +515,7 @@ function resolveServerAddr(addr) {
     else if (!address)
       defer.reject(new Error("no IPv4 addresses for " + ipOrHost));
     else
-      defer.resolve(address + addr.substr(idx));
+      defer.resolve(address + port);
   });
   return defer.promise;
 }
