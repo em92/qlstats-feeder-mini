@@ -202,6 +202,8 @@ function getServerPlayers(req, res) {
             return result;
           }, []);
           var serverinfo = calcServerInfo(zmqAddr, status, gt, ratings);
+          if (serverinfo.gt && status.f)
+            serverinfo.rating = getARatedFactories()[serverinfo.gt].indexOf(status.f) >= 0 ? "A" : "B";
           if (info) {
             serverinfo.map = info.raw.rules.mapname;
             serverinfo.mapstart = info.raw.rules.g_levelStartTime;
