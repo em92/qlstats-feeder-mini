@@ -45,16 +45,18 @@ function parseCommandLine() {
       mode = "full";
     else if (args[0] == "-i")
       mode = "incremental";
+    else if (args[0] == "-a")
+      funMods = false;
+    else if (args[0] == "-b" || args[0] == "-u")
+      funMods = true;
     else if (args[0] == "-p1")
       mode = "part1";
     else if (args[0] == "-p2")
       mode = "part2";
-    else if (args[0] == "-a")
+    else if (args[0] == "-all")
       gametypes = ["ctf", "tdm", "ft", "ffa", "ca", "duel"];
     else if (args[0] == "-r")
       print = true;
-    else if (args[0] == "-u")
-      funMods = true;
     else if (args[0] == "-c")
       args = args.slice(1);
     else if (args[0][0] == "-") {
