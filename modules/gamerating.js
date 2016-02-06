@@ -182,7 +182,7 @@ function resetRatingsInDb(cli) {
 }
 
 function loadPlayers(cli, steamIds) {
-  var query = "select h.hashkey, p.player_id, p.nick, pe.g2_r, pe.g2_rd, pe.g2_dt, pe.g2_games, pe.b_r, pe.b_rd, pe.b_dt, pe.b_games "
+  var query = "select h.hashkey, p.player_id, p.nick, p.active_ind, pe.g2_r, pe.g2_rd, pe.g2_dt, pe.g2_games, pe.b_r, pe.b_rd, pe.b_dt, pe.b_games "
     + " from hashkeys h"
     + " inner join players p on p.player_id=h.player_id"
     + " left outer join player_elos pe on pe.player_id=h.player_id and pe.game_type_cd=$1";
@@ -202,8 +202,8 @@ function loadPlayers(cli, steamIds) {
       _logger.debug("loaded " + result.rows.length + " players");
       result.rows.forEach(function(row) {
         var player = resetRating ?
-          getOrAddPlayer(row.player_id, row.hashkey, row.nick, 0, 0, 0, 0, 0, 0, 0, 0) :
-          getOrAddPlayer(row.player_id, row.hashkey, row.nick, row.g2_r, row.g2_rd, glickoPeriod(row.g2_dt), row.g2_games, row.b_r, row.b_rd, glickoPeriod(row.b_dt), row.b_games);
+          getOrAddPlayer(row.player_id, row.hashkey, row.nick, row.active_ind, 0, 0, 0, 0, 0, 0, 0, 0) :
+          getOrAddPlayer(row.player_id, row.hashkey, row.nick, row.active_ind, row.g2_r, row.g2_rd, glickoPeriod(row.g2_dt), row.g2_games, row.b_r, row.b_rd, glickoPeriod(row.b_dt), row.b_games);
         player.mustSave = false;
       });
     });
@@ -469,6 +469,9 @@ function extractDataFromGameObject(game) {
       }
       if (pd.dg < 500 || pd.dt / pd.dg >= 10.0) // skip AFK players
         continue;
+      
+      if (!pd.active) // ignore deactivated players (i.e. cheaters)
+        continue;
 
       getOrAddPlayer(null, pd.id, pd.name).played = true;
 
@@ -486,13 +489,16 @@ function extractDataFromGameObject(game) {
   }
 }
 
-function getOrAddPlayer(playerId, steamId, name, rating, rd, period, games, ratingB, rdB, periodB, gamesB) {
+function getOrAddPlayer(playerId, steamId, name, isActive, rating, rd, period, games, ratingB, rdB, periodB, gamesB) {
   var player = playersBySteamId[steamId];
   if (!player) {
+    if (typeof (isActive) === "undefined")
+      isActive = true;
     playersBySteamId[steamId] = player = {
       pid: playerId,
       id: steamId,
       name: name,
+      active: isActive,
       rating: g2.makePlayer(rating, rd, period),
       ratingB: g2.makePlayer(ratingB, rdB, periodB)
     };
