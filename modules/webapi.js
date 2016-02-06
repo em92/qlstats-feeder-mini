@@ -191,7 +191,7 @@ function getServerPlayers(req, res) {
 
       return getServerBrowserInfo(gameAddr)
         .then(function(info) {
-          var gt = info.gt || status.gt;
+          var gt = info && info.gt || status.gt;
           var keys = status.p ? Object.keys(status.p) : [];
           var players = keys.reduce(function(result, steamid) {
             var player = status.p[steamid];
@@ -202,8 +202,9 @@ function getServerPlayers(req, res) {
             return result;
           }, []);
           var serverinfo = calcServerInfo(zmqAddr, status, gt, ratings);
-          if (serverinfo.gt && status.f)
-            serverinfo.rating = getARatedFactories()[serverinfo.gt].indexOf(status.f) >= 0 ? "A" : "B";
+          var factory = info && info.raw.rules.g_factory || status.f;
+          if (gt && factory)
+            serverinfo.rating = getARatedFactories()[gt].indexOf(factory) >= 0 ? "A" : "B";
           if (info) {
             serverinfo.map = info.raw.rules.mapname;
             serverinfo.mapstart = info.raw.rules.g_levelStartTime;
