@@ -5,6 +5,7 @@
   request = require("request"),
   gsq = require("game-server-query"),
   Q = require("q"),
+  dns = require("dns"),
   events = require("events"),
   gr = require("./gamerating"),
   utils = require("./utils");
@@ -178,11 +179,12 @@ function getServerPlayers(req, res) {
   var gameAddr = req.params.addr;
   if (!gameAddr) return { ok: false, msg: "No server address specified" };
 
-  return Q.all([getAggregatedServerStatusData(), getSkillRatings(), getZmqFromGamePort()])
+  return Q.all([getAggregatedServerStatusData(), getSkillRatings(), getZmqFromGamePort(), resolveServerAddr(gameAddr)])
     .then(function(info) {
       var serverStatus = info[0];
       var ratings = info[1];
       var portMapping = info[2];
+      gameAddr = info[3];
       var zmqAddr = portMapping[gameAddr] || gameAddr;
       var status = serverStatus[zmqAddr];
       if (!status) return { ok: false, msg: "Server is not being tracked" };
@@ -407,10 +409,11 @@ function getProsNowPlaying(req, res) {
 function getQtvEventStreamUrl(req, res) {
   res.set("Access-Control-Allow-Origin", "*");
   var addr = req.params.addr;
-  return Q.all([getAggregatedServerStatusData(), getZmqFromGamePort()])
+  return Q.all([getAggregatedServerStatusData(), getZmqFromGamePort(), resolveServerAddr(addr)])
     .then(function(data) {
       var status = data[0];
       var portMap = data[1];
+      addr = data[2];
       var zmqAddr = portMap[addr] || addr;
       var api = status[zmqAddr].api;
       return { ok: true, streamUrl: req.protocol + "://" + req.hostname + ":" + api + "/api/qtv/" + zmqAddr + "/stream" };
@@ -437,7 +440,8 @@ function getQtvEventStream(req, res) {
   var defer = Q.defer();
 
   var gameAddr = addr.substr(0, addr.indexOf(":") + 1) + conn.gamePort;
-  return getServerBrowserInfo(gameAddr)
+  return resolveServerAddr(gameAddr)
+    .then(function(gameAddr) { return getServerBrowserInfo(gameAddr) })
     .then(function(info) {
       // send initial player status
       var players = [];
@@ -495,6 +499,25 @@ function isInternalRequest(req) {
   return !(req && req.connection.remoteAddress.indexOf("127.0.0.") < 0 && req.connection.remoteAddress != "::1");
 }
 
+
+function resolveServerAddr(addr) {
+  var idx = addr.indexOf(":");
+  var ipOrHost = idx < 0 ? addr : addr.substr(0, idx);
+  var match = /^([\d.]+)/.exec(ipOrHost);
+  if (match)
+    return Q(addr);
+
+  var defer = Q.defer();
+  dns.lookup(ipOrHost, 4, function(err, address) {
+    if (err)
+      defer.reject(err);
+    else if (!address)
+      defer.reject(new Error("no IPv4 addresses for " + ipOrHost));
+    else
+      defer.resolve(address + addr.substr(idx));
+  });
+  return defer.promise;
+}
 
 // run a server browser query and return a promise for the result as { ok: true, state: {...} }
 function getServerBrowserInfo(gameAddr) {
