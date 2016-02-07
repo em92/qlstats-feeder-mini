@@ -493,7 +493,7 @@ function extractDataFromGameObject(game) {
 function getOrAddPlayer(playerId, steamId, name, isActive, rating, rd, period, games, ratingB, rdB, periodB, gamesB) {
   var player = playersBySteamId[steamId];
   if (!player) {
-    if (typeof (isActive) === "undefined")
+    if (isActive !== false)
       isActive = true;
     playersBySteamId[steamId] = player = {
       pid: playerId,
