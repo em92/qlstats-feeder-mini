@@ -467,7 +467,9 @@ function extractDataFromGameObject(game) {
         // minumum 50% time participation
         continue;
       }
-      if (pd.dg < 500 || pd.dt / pd.dg >= 10.0) // skip AFK players
+      
+      // skip AFK players
+      if ("duel,race".indexOf(game.matchStats.GAME_TYPE) < 0 && (pd.dg < 500 || pd.dt / pd.dg >= 10.0)) 
         continue;
       
 

@@ -795,6 +795,9 @@ function processGameData(game) {
           if ((t[key] || 0) <= 0 || val < t[key])
             t[key] = val;
         }
+        else if (key == "TEAM") {
+          // keep as-is
+        }
         else if (typeof (val) == "number")
           t[key] = (t[key] || 0) + val;
         else if (typeof (val) == "object") {
