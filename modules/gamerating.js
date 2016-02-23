@@ -21,7 +21,8 @@ const
   ERR_MINPLAYERS = 6,
   ERR_DATAFILEMISSING = 7,
   ERR_FACTORY_OR_SETTINGS = 8,
-  ERR_UNSUPPORTED_GAME_TYPE = 9;
+  ERR_UNSUPPORTED_GAME_TYPE = 9,
+  ERR_UNRATED_SERVER = 10;
 
 const rateEachSingleMatch = true;
 var _config;
@@ -34,6 +35,7 @@ var funMods;
 var recalcFactories;
 var strategy;
 var playersBySteamId = {};
+var serversByAddr = {};
 var _lastProcessedMatchStartDt;
 var rateSingleGameQueue = Q();
 
@@ -54,6 +56,7 @@ function rateAllGames(gt, options) {
   return utils.dbConnect(_config.webapi.database)
     .then(function(cli) {
       return resetRatingsInDb(cli)
+        .then(function() { return loadServers(cli); })
         .then(function() { return loadPlayers(cli); })
         .then(function() { return getMatchIds(cli); })
         .then(function(matches) { return reprocessMatches(cli, matches); })
@@ -89,7 +92,8 @@ function rateSingleGameCore(gameId, game) {
   return utils.dbConnect(_config.webapi.database)
     .then(function(cli) {
       return Q()
-        .then(function() { return strategy.isSupported ? loadPlayers(cli, steamIds) : []; })
+        .then(function() { return loadServers(cli, game.serverIp + ":" + game.serverPort); })
+        .then(function() { return strategy.isSupported ? loadPlayers(cli, steamIds) : null; })
         .then(function() { return processGame(cli, gameId, game); })
         .then(function(isFunMod) { return isFunMod === null ? Q(null) : savePlayerRatings(cli, isFunMod); })
         .then(function() { return true; })
@@ -181,6 +185,18 @@ function resetRatingsInDb(cli) {
   }
 }
 
+function loadServers(cli, addr) {
+  var where = addr ? " where hashkey = $1" : "";
+  var args = addr ? [addr] : [];
+  return Q
+    .ninvoke(cli, "query", "select hashkey, pure_ind from servers" + where, args)
+    .then(function (result) {
+    for (var i = 0; i < result.rows.length; i++)
+      serversByAddr[result.rows[i].hashkey] = result.rows[i].pure_ind;
+    return serversByAddr;
+  });
+}
+
 function loadPlayers(cli, steamIds) {
   var query = "select h.hashkey, p.player_id, p.nick, p.active_ind, pe.g2_r, pe.g2_rd, pe.g2_dt, pe.g2_games, pe.b_r, pe.b_rd, pe.b_dt, pe.b_games "
     + " from hashkeys h"
@@ -206,8 +222,10 @@ function loadPlayers(cli, steamIds) {
           getOrAddPlayer(row.player_id, row.hashkey, row.nick, row.active_ind, row.g2_r, row.g2_rd, glickoPeriod(row.g2_dt), row.g2_games, row.b_r, row.b_rd, glickoPeriod(row.b_dt), row.b_games);
         player.mustSave = false;
       });
+      return playersBySteamId;
     });
 }
+
 
 function getMatchIds(cli) {
   var cond = resetRating ? "" : " and g2_status=" + ERR_NOTRATEDYET;
@@ -307,7 +325,9 @@ function processFile(cli, gameId, file) {
 }
 
 function processGame(cli, gameId, game) {
-  var result = extractDataFromGameObject(game);
+  var addr = game.serverIp + ":" + game.serverPort;
+  var ratedServer = !serversByAddr.hasOwnProperty(addr) || serversByAddr[addr];
+  var result = ratedServer ? extractDataFromGameObject(game) : ERR_UNRATED_SERVER;
 
   // store a status code why the game was not rated
   if (typeof (result) === "number")
