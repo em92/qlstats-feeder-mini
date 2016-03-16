@@ -336,7 +336,6 @@ function processGame(cli, gameId, game) {
   var isFunMod = strategy.validFactories.indexOf(game.matchStats.FACTORY) < 0 
     || game.matchStats.INSTAGIB;
 
-
   var playerRanking = result;
   var players = [];
   for (var i = 0; i < playerRanking.length; i++) {
@@ -354,7 +353,16 @@ function processGame(cli, gameId, game) {
       var p2 = playersBySteamId[r2.id];
       var outcome = strategy.isDraw(r1.score, r2.score, game) ? 0.5 : r1.score > r2.score ? 1 : 0;
       var rating2 = isFunMod ? p2.ratingB : p2.rating;
-      g2.addResult(rating1, rating2, outcome);
+
+      if (r1.team !== undefined && r1.team == r2.team) // don't compare with team mates
+        continue;
+
+      if (p1.active == p2.active) // neither or both are cheaters
+        g2.addResult(rating1, rating2, outcome);
+      else if (!p1.active) // p1 is a cheater, so only his rating will be updated
+        g2.addResult(rating1, rating2, outcome, true);
+      else // p2 is a cheater, so only his rating will be updated
+        g2.addResult(rating2, rating1, 1 - outcome, true);
     }
   }
 
@@ -399,7 +407,7 @@ function extractDataFromGameObject(game) {
   if (!strategy.validateGame(game)) return ERR_ROUND_OR_TIMELIMIT;
 
   // aggregate total time, damage and score of player during a match (could have been switching teams)
-  var playerData = {}
+  var playerData = {};
   var botmatch = false;
   var timeRed = 0, timeBlue = 0, isTeamGame, roundsRed, roundsBlue;
   aggregateTimeAndScorePerPlayer();
@@ -494,19 +502,19 @@ function extractDataFromGameObject(game) {
       
 
       var p = getOrAddPlayer(null, pd.id, pd.name);
-      if (!p.active) // ignore deactivated players (i.e. cheaters)
-        continue;     
       p.played = true;
 
       if (isTeamGame) {
         var winningTeam = game.matchStats.TSCORE0 > game.matchStats.TSCORE1 ? -1 : game.matchStats.TSCORE0 == game.matchStats.TSCORE1 ? 0 : +1;
         var playerTeam = pd.timeRed >= pd.timeBlue ? -1 : +1;
         pd.win = playerTeam == winningTeam;
+        // if same time in red and blue, use team "free" so the player is compared to everyone
+        pd.team = pd.timeRed > pd.timeBlue ? 1 : pd.timeRed < pd.timeBlue ? 2 : 0;
       }
 
       var rankingScore = calcPlayerPerformance(pd, game);
       if (rankingScore != NaN)
-        players.push({ id: pd.id, score: rankingScore, win: pd.win });
+        players.push({ id: pd.id, score: rankingScore, win: pd.win, team: pd.team });
     }
     return players;
   }

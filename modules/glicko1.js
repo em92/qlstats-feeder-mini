@@ -149,12 +149,15 @@
     * @param {Player} player1 The first player
     * @param {Player} player2 The second player
     * @param {number} outcome The outcome : 0 = defeat, 1 = victory, 0.5 = draw
+    * @param {oneway} if true, only player1's rating will be updated (e.g. to update a known cheater's rating without affecting his opponents)
     */
-  Glicko.prototype.addResult = function (player1, player2, outcome) {
+  Glicko.prototype.addResult = function (player1, player2, outcome, oneway) {
     player1.addResult(player2, outcome);
-    player2.addResult(player1, 1 - outcome);
     this.activePlayers[player1.id] = player1;
-    this.activePlayers[player2.id] = player2;
+    if (!oneway) {
+      player2.addResult(player1, 1 - outcome);
+      this.activePlayers[player2.id] = player2;
+    }
   };
   
   Glicko.prototype.getActivePlayers = function () {
