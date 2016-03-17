@@ -140,7 +140,7 @@ function createGameTypeStrategy(gametype) {
     "ffa": function(game) { return game.matchStats.FRAG_LIMIT >= 50 },
     "ca": function(game) { return Math.max(game.matchStats.TSCORE0, game.matchStats.TSCORE1) >= 8 /* old JSONS have no ROUND_LIMIT */ },
     "tdm": function(game) { return Math.max(game.matchStats.TSCORE0, game.matchStats.TSCORE1) >= 100 || game.matchStats.GAME_LENGTH >= 15 * 60 },
-    "ctf": function(game) { return Math.max(game.matchStats.TSCORE0, game.matchStats.TSCORE1) >= 8 || game.matchStats.GAME_LENGTH >= 15 * 60 },
+    "ctf": function(game) { return Math.max(game.matchStats.TSCORE0, game.matchStats.TSCORE1) >= 8  || Math.abs(game.matchStats.TSCORE0 - game.matchStats.TSCORE1) >= 5 || game.matchStats.GAME_LENGTH >= 15 * 60 },
     "ft": function(game) { return Math.max(game.matchStats.TSCORE0, game.matchStats.TSCORE1) >= 8 || game.matchStats.GAME_LENGTH >= 15 * 60 /* old JSONS have no ROUND_LIMIT */ }
   }
   
