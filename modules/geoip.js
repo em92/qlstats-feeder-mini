@@ -36,7 +36,7 @@ function fillServer(cli, ip) {
 function lookupGeoIp(ip) {
   var defer = Q.defer();
   var ok = true;
-  request.get("http://freegeoip.net/json/" + ip, { timeout: 7000 })
+  request.get("http://geoip.nekudo.com/api/" + ip + "/en", { timeout: 7000 })
     .on("error", function(err) { defer.reject(err); })
     .on("response", function(response) {
       if (response.statusCode != 200) {
@@ -53,8 +53,8 @@ function lookupGeoIp(ip) {
 
 function updateDatabase(cli, ip, geoInfo) {
   // {"ip":"212.241.101.170","country_code":"AT","country_name":"Austria","region_code":"","region_name":"","city":"","zip_code":"","time_zone":"Europe/Vienna","latitude":48.2,"longitude":16.3667,"metro_code":0}
-  var region = getRegion(geoInfo.latitude, geoInfo.longitude);
-  var values = [geoInfo.country_name, region, geoInfo.country_code, geoInfo.region_code, geoInfo.latitude, geoInfo.longitude, ip];
+  var region = getRegion(geoInfo.location.latitude, geoInfo.location.longitude);
+  var values = [geoInfo.country.name, region, geoInfo.country.code, null, geoInfo.location.latitude, geoInfo.location.longitude, ip];
   return Q
     .ninvoke(cli, "query", { name: "servers_upd", text: "update servers set location=$1, region=$2, country=$3, state=$4, latitude=$5, longitude=$6 where ip_addr=$7", values: values })
     .then(function() { _logger.debug("updated location for server " + ip) });
