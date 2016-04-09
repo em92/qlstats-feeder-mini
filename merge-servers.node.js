@@ -1,8 +1,8 @@
-﻿var 
-  fs = require("graceful-fs"), 
+﻿var
+  fs = require("graceful-fs"),
   pg = require("pg"),
   Q = require("q"),
-  utils = require("./modules/utils")
+  utils = require("./modules/utils");
 
 var _config;
 
@@ -36,12 +36,12 @@ function main() {
 
 function updateServers(cli, ids, maxId) {
   return ids.reduce(function(chain, id) {
-      if (id == maxId)
-        return chain;
-      return chain
-        .then(function() { return Q.ninvoke(cli, "query", "update games set server_id=$1 where server_id=$2", [maxId, id]); })
-        .then(function() { return Q.ninvoke(cli, "query", "update servers set active_ind=false, hashkey='' where server_id=$1", [id]); });
-    }, Q())
+    if (id == maxId)
+      return chain;
+    return chain
+      .then(function() { return Q.ninvoke(cli, "query", "update games set server_id=$1 where server_id=$2", [maxId, id]); })
+      .then(function() { return Q.ninvoke(cli, "query", "update servers set active_ind=false, hashkey='' where server_id=$1", [id]); });
+  }, Q());
 }
 
 main();
