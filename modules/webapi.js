@@ -20,7 +20,8 @@ const GameTypes = { 0: "FFA", 1: "Duel", 2: "Race", 3: "TDM", 4: "CA", 5: "CTF",
 
 // interface for communication with the feeder.node.js module
 var _feeder = {
-  getStatsConnections: function() {}
+  getStatsConnections: function () { },
+  isTeamGame: function(gt) {}
 };
 
 var _getServerSkillratingCache = { timestamp: 0, data: null, updatePromise: null };
@@ -208,6 +209,8 @@ function getServerPlayers(req, res) {
           if (info) {
             serverinfo.map = info.raw.rules.mapname;
             serverinfo.mapstart = info.raw.rules.g_levelStartTime;
+            serverinfo.scoreRed = _feeder.isTeamGame(gt) ? info.raw.rules.g_redScore : undefined;
+            serverinfo.scoreBlue = _feeder.isTeamGame(gt) ? info.raw.rules.g_blueScore : undefined;
           }
           return { ok: true, players: players, serverinfo: serverinfo };
         });
