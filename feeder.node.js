@@ -244,7 +244,8 @@ function startHttpd() {
     getStatsConnections: function() { return _statsConnections; },
     addServer: addServer,
     removeServer: removeServer,
-    writeConfig: writeConfig
+    writeConfig: writeConfig,
+    isTeamGame: isTeamGame
   };
 
   if (_config.webadmin.enabled) {
