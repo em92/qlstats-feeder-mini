@@ -208,9 +208,11 @@ function getServerPlayers(req, res) {
             serverinfo.rating = getARatedFactories()[gt].indexOf(factory) >= 0 ? "A" : "B";
           if (info) {
             serverinfo.map = info.raw.rules.mapname;
-            serverinfo.mapstart = info.raw.rules.g_levelStartTime;
-            serverinfo.scoreRed = _feeder.isTeamGame(gt) ? info.raw.rules.g_redScore : undefined;
-            serverinfo.scoreBlue = _feeder.isTeamGame(gt) ? info.raw.rules.g_blueScore : undefined;
+            serverinfo.mapstart = info.raw.rules.g_gameState == "IN_PROGRESS" ? info.raw.rules.g_levelStartTime : 0;
+            if (_feeder.isTeamGame(gt)) {
+              serverinfo.scoreRed = info.raw.rules.g_redScore;
+              serverinfo.scoreBlue = info.raw.rules.g_blueScore;
+            }
           }
           return { ok: true, players: players, serverinfo: serverinfo };
         });
@@ -701,7 +703,7 @@ function getZmqFromGamePort() {
     utils.dbConnect(_config.webapi.database)
     .then(function(cli) {
       return Q
-        .ninvoke(cli, "query", "select ip_addr, port, hashkey from servers")
+        .ninvoke(cli, "query", "select ip_addr, port, hashkey from servers where active_ind=true")
         .then(function(result) {
           _getZmqFromGamePortCache = { timestamp: Date.now(), data: {} };
           result.rows.forEach(function(row) {
