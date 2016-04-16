@@ -351,6 +351,7 @@ function getProsNowPlaying(req, res) {
   res.set("Access-Control-Allow-Origin", "*");
   var region = parseInt(req.query.region) || 0;
   var limit = parseInt(req.query.limit) || 10;
+  var queryGt = req.query.gt || "";
 
   var now = Date.now();
   if (_getProsNowPlayingCache.timestamp + 15000 > now)
@@ -372,6 +373,10 @@ function getProsNowPlaying(req, res) {
           getServerBrowserInfo(gameAddr);
           return;
         }
+
+        if (queryGt && gt != queryGt)
+          return;
+
         var top = tops[gt];
         if (!top)
           top = tops[gt] = [];
@@ -405,7 +410,7 @@ function getProsNowPlaying(req, res) {
 
       return tops;
     })
-    .finally(function() {
+    .continue(function() {
       _getProsNowPlayingCache.updatePromise = null;
     });
 }
