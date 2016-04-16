@@ -350,6 +350,7 @@ function getARatedFactories() {
 function getProsNowPlaying(req, res) {
   res.set("Access-Control-Allow-Origin", "*");
   var region = parseInt(req.query.region) || 0;
+  var limit = parseInt(req.query.limit) || 10;
 
   var now = Date.now();
   if (_getProsNowPlayingCache.timestamp + 15000 > now)
@@ -399,7 +400,7 @@ function getProsNowPlaying(req, res) {
       Object.keys(tops).forEach(function(gt) {
         var top = tops[gt];
         top.sort(function(a, b) { return b.rating - a.rating; });
-        tops[gt] = top.slice(0, 10);
+        tops[gt] = top.slice(0, limit);
       });
 
       return tops;
