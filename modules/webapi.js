@@ -351,7 +351,7 @@ function getProsNowPlaying(req, res) {
   res.set("Access-Control-Allow-Origin", "*");
   var region = parseInt(req.query.region) || 0;
   var limit = parseInt(req.query.limit) || 10;
-  var queryGt = req.query.gt || "";
+  var queryGt = req.query.gt || null;
 
   var now = Date.now();
   if (_getProsNowPlayingCache.timestamp + 15000 > now)
@@ -410,7 +410,7 @@ function getProsNowPlaying(req, res) {
 
       return tops;
     })
-    .continue(function() {
+    .finally(function() {
       _getProsNowPlayingCache.updatePromise = null;
     });
 }
