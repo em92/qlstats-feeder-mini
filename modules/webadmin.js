@@ -229,6 +229,10 @@ function updateServers(req) {
 
   _feeder.writeConfig();
 
+  if (!(_config.webapi.database)) {
+    return Q(result);
+  }
+  
   return utils.dbConnect(_config.webapi.database)
     .then(function(cli) {
       return Q()
