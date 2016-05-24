@@ -407,21 +407,29 @@ function connectToServerList(servers) {
     _statsConnections = newZmqConnections;
     return true;
   }
+  
+  // load associated game ports from database
+  var ret = Q({});
+  if (_config.webapi.database) {
+    ret = ret.then(function() {
+      return utils.dbConnect(_config.webapi.database)
+        .then(function(cli) {
+          return Q
+            .ninvoke(cli, "query", "select hashkey, port from servers")
+            .then(function(result) {
+              var gamePorts = {};
+              result.rows.forEach(function(row) {
+                gamePorts[row.hashkey] = row.port;
+              });
+              return gamePorts;
+            })
+            .finally(function() { cli.release(); });
+        });
+    });
+  }
 
-  return utils.dbConnect(_config.webapi.database)
-    .then(function(cli) {
-      return Q
-        .ninvoke(cli, "query", "select hashkey, port from servers")
-        .then(function(result) {
-          var gamePorts = {};
-          result.rows.forEach(function(row) {
-            gamePorts[row.hashkey] = row.port;
-          });
-          return gamePorts;
-        })
-        .finally(function() { cli.release(); });
-    })
-    .then(function(gamePorts) {
+  return ret
+    .then(function (gamePorts) {
       _statsConnections = newZmqConnections;
       var count = 0;
       try {
@@ -487,6 +495,7 @@ function onZmqMessageCallback(conn, data) {
   else if (obj.TYPE == "PLAYER_DISCONNECT") {
     var p = conn.players[obj.DATA.STEAM_ID];
     if (p) {
+      checkQuitter(conn, obj.DATA.STEAM_ID);
       updatePlayerPlayTime(p);
       p.quit = true;
       p.team = 3;
@@ -495,6 +504,8 @@ function onZmqMessageCallback(conn, data) {
   else if (obj.TYPE == "PLAYER_SWITCHTEAM") {
     var p = conn.players[obj.DATA.KILLER.STEAM_ID];
     updatePlayerPlayTime(p);
+    if ([3,"SPECTATOR"].indexOf(obj.DATA.KILLER.TEAM) >= 0)
+      checkQuitter(conn, obj.DATA.KILLER.STEAM_ID);
     setPlayerTeam(conn, obj.DATA.KILLER);
   }
   else if (obj.TYPE == "PLAYER_KILL") {
@@ -507,7 +518,7 @@ function onZmqMessageCallback(conn, data) {
   else if (obj.TYPE == "MATCH_STARTED")
     onMatchStarted();
   else if (obj.TYPE == "ROUND_OVER")
-    onRoundOver();
+    onRoundOver(obj.DATA);
   else if (obj.TYPE == "PLAYER_STATS") {
     if (!obj.DATA.WARMUP)
       conn.playerStats.push(obj.DATA);
@@ -536,23 +547,50 @@ function onZmqMessageCallback(conn, data) {
     });
     conn.round = 1;
     conn.roundStartTime = now;
-    conn.roundDurations = [];
+    conn.roundStats = [];
+    conn.quitters = [];
     conn.roundTimer = setTimeout(function () { roundSnapshot(conn) }, 10 * 1000); // "prepare to fight! round begins in: 10 ... 3, 2, 1, FIGHT!"    
   }
   
-  function onRoundOver() {
+  function onRoundOver(data) {
     var duration = Math.round((now - conn.roundStartTime) / 1000);
+    
+    var roundStats = { TEAMS: { 1: [], 2: [] } };
+    if (conn.matchStartTime) {
+      roundStats.teamWon = data.TEAM_WON;
+      roundStats.roundLength = duration;
+      conn.roundStats.push(roundStats);
+    }
+
     conn.matchDuration += duration;
     Object.keys(conn.players).forEach(function (steamid) {
       var p = conn.players[steamid];
-      if (p.rounds[conn.round])
-        p.playTimes[p.rounds[conn.round]] += duration; // add time to the team that the player played in this round (could be different team now)
+      var team = p.rounds[conn.round];
+      if (team == 1 || team == 2) {
+        p.playTimes[team] += duration; // add time to the team that the player played in this round (could be different team now)
+        roundStats.TEAMS[team].push(steamid);
+      }
       p.dead = false;
     });
     
     ++conn.round;
     conn.roundStartTime = now;
     conn.roundTimer = setTimeout(function () { roundSnapshot(conn) }, 14 * 1000); // "red won the round! round begins in: 10 ... 3, 2, 1, FIGHT!"    
+  }
+  
+  function checkQuitter(conn, steamid) {
+    if (conn.matchStartTime == 0) // match not started or already finished
+      return;
+    var p = conn.players[steamid];
+    if (!p || (p.team != 1 && p.team != 2))
+      return;
+    var teamSize = [0, 0, 0, 0];
+    Object.keys(conn.players).forEach(function (steamid) { teamSize[conn.players[steamid].team]++; });
+    if (teamSize[p.team] > teamSize[3 - p.team]) // quitting from the larger team is fine
+      return;
+    if (teamSize[p.team] + 3 <= teamSize[3 - p.team]) // quitting is also not punished, when the other team has 3 players more (a diff of 2 players can be fixed by 1 player switching teams)
+      return;
+    conn.quitters.push(steamid);
   }
 
   function setPlayerTeam(conn, playerData, overrideTeam) {
@@ -571,6 +609,8 @@ function onZmqMessageCallback(conn, data) {
   
   function updatePlayerPlayTime(p) {
     if (!p || p.quit) return;
+    
+    // for round-based games types the play time is updated when the round is over
     if ("ca,ft,ad".indexOf(conn.gameType || "-") >= 0) return;
     
     // for non-round-based games update playTimes immediately
@@ -609,7 +649,9 @@ function onZmqMessageCallback(conn, data) {
       matchStats: obj.DATA,
       playerStats: conn.playerStats,
       roundCount: getRoundsInformation(conn),
-      playTimes: getPlayTimeInformation(conn)
+      playTimes: getPlayTimeInformation(conn),
+      roundStats: conn.matchStartTime && conn.round ? conn.roundStats : undefined,
+      quitters: conn.quitters
     };
     conn.playerStats = [];
     Object.keys(conn.players).forEach(function (steamid) {
