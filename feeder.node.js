@@ -986,7 +986,7 @@ function postMatchReportToXonstat(addr, game, report) {
       uri: _config.feeder.xonstatSubmissionUrl,
       timeout: 10000,
       method: "POST",
-      headers: { "X-D0-Blind-Id-Detached-Signature": "dummy" },
+      headers: { "X-D0-Blind-Id-Detached-Signature": "dummy", "Content-Type": "text/plain" },
       body: report
     },
     function(err, response, body) {
