@@ -149,7 +149,7 @@ function createGameTypeStrategy(gametype) {
     "duel": function() { return false; },
     "ffa": function(a, b, game) { return Math.abs(a - b) <= 2 * Math.max(1, game.matchStats.FRAG_LIMIT/50) },
     "ca": function(a, b) { return Math.abs(a - b) <= 2 },
-    "tdm": function(a, b) { return a / b <= 1.05 && b / a <= 1.05 },
+    "tdm": function(a, b) { return Math.abs(a / b) <= 1.05 && Math.abs(b / a) <= 1.05 },
     "ctf": function(a, b) { return a / b <= 1.05 && b / a <= 1.05 },
     "ft": function(a, b) { return Math.abs(a - b) <= 5; }
   }
