@@ -51,8 +51,9 @@ function StatsConnection(owner, ip, port, pass, onZmqMessageCallback, gamePort) 
   // stuff for feeder to track rounds and real play time
   this.round = 0;
   this.roundStartTime = 0;
-  this.roundDurations = [];
   this.emitter = new events.EventEmitter();
+  this.roundStats = [];
+  this.quitters = [];
 }
 
 StatsConnection.prototype.connect = function (isReconnect) {

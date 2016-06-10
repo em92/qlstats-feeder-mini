@@ -22,7 +22,8 @@ const
   ERR_DATAFILEMISSING = 7,
   ERR_FACTORY_OR_SETTINGS = 8,
   ERR_UNSUPPORTED_GAME_TYPE = 9,
-  ERR_UNRATED_SERVER = 10;
+  ERR_UNRATED_SERVER = 10,
+  ERR_UNRATED_GAME = 11;
 
 const rateEachSingleMatch = true;
 var _config;
@@ -399,6 +400,11 @@ function processGame(cli, gameId, game) {
 }
 
 function extractDataFromGameObject(game) {
+  if (/unrated|unranked/i.test(game.matchStats.FACTORY_TITLE)) {
+    _logger.debug(addr + ": ignoring unrated game " + game.matchStats.MATCH_GUID);
+    return ERR_UNRATED_GAME;
+  }
+
   if (!strategy.isSupported) return ERR_UNSUPPORTED_GAME_TYPE;
   if (game.matchStats.ABORTED) return ERR_ABORTED;
   if (game.matchStats.INFECTED) return ERR_FACTORY_OR_SETTINGS;

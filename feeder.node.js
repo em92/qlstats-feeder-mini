@@ -755,6 +755,10 @@ function processGameData(game) {
     _logger.debug(addr + ": ignoring aborted game " + game.matchStats.MATCH_GUID);
     return Q(false);
   }
+  if (/untracked/i.test(game.matchStats.FACTORY_TITLE)) {
+    _logger.debug(addr + ": ignoring untracked game " + game.matchStats.MATCH_GUID);
+    return Q(false);
+  }
 
   var gt = game.matchStats.GAME_TYPE.toLowerCase();
 
