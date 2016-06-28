@@ -204,8 +204,11 @@ function getServerPlayers(req, res) {
           }, []);
           var serverinfo = calcServerInfo(zmqAddr, status, gt, ratings);
           var factory = info && info.raw.rules.g_factory || status.f;
-          if (gt && factory)
-            serverinfo.rating = getARatedFactories()[gt].indexOf(factory) >= 0 ? "A" : "B";
+          if (gt && factory) {
+            var aRatings = getARatedFactories()[gt];
+            if (aRatings)
+              serverinfo.rating = aRatings.indexOf(factory) >= 0 ? "A" : "B";
+          }
           if (info) {
             serverinfo.map = info.raw.rules.mapname;
             serverinfo.mapstart = info.raw.rules.g_gameState == "IN_PROGRESS" ? info.raw.rules.g_levelStartTime : 0;
