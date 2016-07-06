@@ -486,7 +486,7 @@ function onZmqMessageCallback(conn, data) {
   var msg = data.toString();
   var obj = JSON.parse(msg);
   var now = new Date().getTime();
-  _logger.trace(conn.addr + ": received ZMQ message: " + msg);
+  //_logger.trace(conn.addr + ": received ZMQ message: " + msg);
 
   //fs.writeFileSync("temp/" + obj.TYPE.toLowerCase() + ".json", msg);
 
