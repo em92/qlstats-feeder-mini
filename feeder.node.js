@@ -918,6 +918,7 @@ function createXonstatMatchReport(gt, game) {
       report.push("n " + p.NAME);
       if (team)
         report.push("t " + team);
+      report.push("e playermodel " + p.MODEL);
       report.push("e matches 1");
       report.push("e scoreboardvalid 1");
       report.push("e alivetime " + Math.min(p.PLAY_TIME, game.matchStats.GAME_LENGTH));
@@ -949,6 +950,11 @@ function createXonstatMatchReport(gt, game) {
         report.push("e acc-" + w + "-fired " + wstats.DG);
         report.push("e acc-" + w + "-hit " + wstats.DR);
       }
+      
+      Object.keys(p.MEDALS).forEach( function(medal_name) {
+        var medal_count = p.MEDALS[medal_name].toString();
+        report.push("e medal-" + medal_name.toLowerCase() + " " + medal_count);
+      });
     }
   }
   
