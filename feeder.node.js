@@ -40,6 +40,7 @@ var
   express = require("express"),
   http = require("http"),
   StatsConnection = require("./modules/statsconn"),
+  semver = require("semver"),
   utils = require("./modules/utils");
 
 var IpPortPassRegex = /^(?:([^:]*):)?((?:[0-9]{1,3}\.){3}[0-9]{1,3}):([0-9]+)(?:\/(.*))?$/; // IP:port/pass
@@ -63,6 +64,11 @@ function main() {
   _logger = log4js.getLogger("feeder");
   //Q.longStackSupport = true; // enable if you have to trace a problem, but it has a HUGE performance penalty
   StatsConnection.setLogger(_logger);
+
+  // checking node version
+  if (semver.lt( process.versions.node, "0.12.0" ) ) {
+    _logger.warn("node >= 0.12.0 required, but using node v" + process.versions.node);
+  }
   
   var filesToProcess = parseCommandLine();
 
