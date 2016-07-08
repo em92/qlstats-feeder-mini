@@ -294,7 +294,10 @@ function processJsonFiles(files) {
   // serialize calls for each file
   return files.reduce(function(chain, file) {
     return chain.then(function (prevOk) {
-      return feedJsonFile(file).then(function (ok) { return ok && prevOk; });
+      return feedJsonFile(file).then(function (ok) {
+         if (global.gc) global.gc();
+         return ok && prevOk;
+      });
     });
   }, Q(true));
 
@@ -312,7 +315,7 @@ function processJsonFiles(files) {
 
         if (!file.match(/.json(.gz)?$/)) {
           _logger.warn("Skipping file (not *.json[.gz]): " + file);
-          return Q(true);
+          return true;
         }
 
         return Q
@@ -325,14 +328,14 @@ function processJsonFiles(files) {
             }
             catch (err) {
               if (_deleteBrokenFiles)
-                return Q.nfcall(fs.unlink, file).then(Q());
+                return Q.nfcall(fs.unlink, file);
               throw err;
             }
             return processGameData(gameData);
           })
           .then(function() {
             if (_reloadErrorFiles)
-              return Q.nfcall(fs.unlink, file).then(Q(true));
+              return Q.nfcall(fs.unlink, file).then( function() { return true });
             return true;
           })
           .catch(function(err) {
@@ -759,11 +762,11 @@ function processGameData(game) {
 
   if (game.matchStats.ABORTED) {
     _logger.debug(addr + ": ignoring aborted game " + game.matchStats.MATCH_GUID);
-    return Q(false);
+    return false;
   }
   if (/untracked/i.test(game.matchStats.FACTORY_TITLE)) {
     _logger.debug(addr + ": ignoring untracked game " + game.matchStats.MATCH_GUID);
-    return Q(false);
+    return false;
   }
 
   var gt = game.matchStats.GAME_TYPE.toLowerCase();
@@ -781,7 +784,7 @@ function processGameData(game) {
     var count = playerCounts.reduce(function(s, c) { return s + c; }, 0);
     if (count < 4) {
       _logger.debug("only " + count + " player(s) in match, minimum required is 4");
-      return Q(false);
+      return false;
     }
   }
   else {
@@ -791,7 +794,7 @@ function processGameData(game) {
       var min = minCounts[i];
       if (playerCounts[i] < min) {
         _logger.debug("only " + playerCounts[i] + " player(s) in team " + i + ", minimum required is " + min);
-        return Q(false);
+        return false;
       }
     }
   }
@@ -799,19 +802,19 @@ function processGameData(game) {
   var report = createXonstatMatchReport(gt, game);
   if (!report) {
     _logger.error(addr + ": no match report generated for " + game.matchStats.MATCH_GUID);
-    return Q(false);
+    return false;
   }
 
   return postMatchReportToXonstat(addr, game, report)
     .then(function(result) {
       if (!_config.feeder.calculateGlicko)
-        return Q(true);
+        return true;
       if (!result.ok || !result.game_id) {
         if (_gameId)
           result = { game_id: _gameId } // this is for running a match data file through the debugger
         else {
           _logger.debug("game could not be rated: " + game.matchStats.MATCH_GUID);
-          return Q(false);
+          return false;
         }
       }
       var rating = require("./modules/gamerating");
