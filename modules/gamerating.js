@@ -8,7 +8,8 @@
   utils = require("./utils");
 
 // calculate a value for "c" so that an average RD value of 30 changes back to 350 when a player is inactive for 720 rating periods (=days)
-const g2 = new glicko.Glicko({ rating: 1500, rd: 350, c: Math.sqrt((Math.pow(350, 2) - Math.pow(30, 2)) / 720) });
+// the default rating value must be kept in-sync with the value for the /elo API in player.py
+const g2 = new glicko.Glicko({ rating: 1337, rd: 350, c: Math.sqrt((Math.pow(350, 2) - Math.pow(30, 2)) / 720) });
 
 // values for DB column games.g2_status
 const
