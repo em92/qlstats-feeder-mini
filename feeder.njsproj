@@ -68,6 +68,8 @@ sample-data\combined_stats_duel.json
     <Content Include="sample-data\player_stats.json" />
     <Content Include="sample-data\player_switchteam.json" />
     <Content Include="sample-data\round_over.json" />
+    <Content Include="views\account.ejs" />
+    <Content Include="views\login.ejs" />
     <TypeScriptCompile Include="typings\express\express.d.ts" />
     <TypeScriptCompile Include="typings\graceful-fs\graceful-fs.d.ts" />
     <TypeScriptCompile Include="typings\log4js\log4js.d.ts" />
@@ -115,6 +117,7 @@ sample-data\combined_stats_duel.json
     <Folder Include="typings\pg" />
     <Folder Include="typings\q" />
     <Folder Include="typings\requirejs" />
+    <Folder Include="views\" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.Common.targets" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
   <!--Do not delete the following Import Project.  While this appears to do nothing it is a marker for setting TypeScript properties before our import that depends on them.-->

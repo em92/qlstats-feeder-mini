@@ -1,9 +1,9 @@
-﻿const
+﻿var
   log4js = require("log4js"),
   Q = require("q"),
   rating = require("./modules/gamerating");
 
-const _logger = log4js.getLogger("rating");
+var _logger = log4js.getLogger("rating");
 
 var options = {
   full: { resetRating: true, updateDatabase: true, onlyProcessMatchesBefore: null, printResult: false },

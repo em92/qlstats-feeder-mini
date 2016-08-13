@@ -1,4 +1,4 @@
-﻿const
+﻿var
   fs = require("graceful-fs"),
   pg = require("pg"),
   zlib = require("zlib"),
@@ -9,10 +9,10 @@
 
 // calculate a value for "c" so that an average RD value of 30 changes back to 350 when a player is inactive for 720 rating periods (=days)
 // the default rating value must be kept in-sync with the value for the /elo API in player.py
-const g2 = new glicko.Glicko({ rating: 1337, rd: 350, c: Math.sqrt((Math.pow(350, 2) - Math.pow(30, 2)) / 720) });
+var g2 = new glicko.Glicko({ rating: 1337, rd: 350, c: Math.sqrt((Math.pow(350, 2) - Math.pow(30, 2)) / 720) });
 
 // values for DB column games.g2_status
-const
+var
   ERR_NOTRATEDYET = 0,
   ERR_OK = 1,
   ERR_ABORTED = 2,
@@ -26,7 +26,7 @@ const
   ERR_UNRATED_SERVER = 10,
   ERR_UNRATED_GAME = 11;
 
-const rateEachSingleMatch = true;
+var rateEachSingleMatch = true;
 var _config;
 var resetRating;
 var updateDatabase;
@@ -45,7 +45,7 @@ exports.rateAllGames = rateAllGames;
 exports.rateSingleGame = rateSingleGame;
 exports.createGameTypeStrategy = createGameTypeStrategy;
 
-const _logger = log4js.getLogger("gamerating");
+var _logger = log4js.getLogger("gamerating");
 
 function init() {
   _config = JSON.parse(fs.readFileSync(__dirname + "/../cfg.json")); 

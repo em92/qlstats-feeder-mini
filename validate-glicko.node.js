@@ -1,4 +1,4 @@
-﻿const
+﻿var
   pg = require("pg"),
   fs = require("graceful-fs"),
   log4js = require("log4js"),

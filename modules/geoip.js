@@ -1,4 +1,4 @@
-﻿const
+﻿var
   pg = require("pg"),
   log4js = require("log4js"),
   request = require("request"),
@@ -7,7 +7,7 @@
 exports.fillAllServers = fillAllServers;
 exports.fillServer = fillServer;
 
-const _logger = log4js.getLogger("geoip");
+var _logger = log4js.getLogger("geoip");
 
 function fillAllServers(cli) {
   return queryServers(cli)

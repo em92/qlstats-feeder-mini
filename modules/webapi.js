@@ -1,4 +1,4 @@
-﻿const
+﻿var
   fs = require("graceful-fs"),
   pg = require("pg"),
   log4js = require("log4js"),
@@ -16,7 +16,7 @@ var DEBUG = false;
 var _config;
 var _logger = log4js.getLogger("webapi");
 
-const GameTypes = { 0: "FFA", 1: "Duel", 2: "Race", 3: "TDM", 4: "CA", 5: "CTF", 6: "1Flag", 8: "Harv", 9: "FT", 10: "Dom", 11: "A&D", 12: "RR" };
+var GameTypes = { 0: "FFA", 1: "Duel", 2: "Race", 3: "TDM", 4: "CA", 5: "CTF", 6: "1Flag", 8: "Harv", 9: "FT", 10: "Dom", 11: "A&D", 12: "RR" };
 
 // interface for communication with the feeder.node.js module
 var _feeder = {
