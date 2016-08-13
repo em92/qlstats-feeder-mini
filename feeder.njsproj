@@ -18,10 +18,11 @@
     <NodeExeArguments>
     </NodeExeArguments>
     <StartWebBrowser>True</StartWebBrowser>
-    <ScriptArguments>-c cfg2.json</ScriptArguments>
+    <ScriptArguments>-c mycfg.json</ScriptArguments>
     <Environment>foo=ql-match-jsons\2016-01\06\f84a663f-f448-4920-9622-e9a9b1a6e154.json.gz
 -f -u tdm
-sample-data\combined_stats_ca.json</Environment>
+sample-data\combined_stats_duel.json
+ -g 19498 sample-data\combined_stats_ca.json</Environment>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)' == 'Debug'" />
   <PropertyGroup Condition="'$(Configuration)' == 'Release'" />
@@ -38,7 +39,7 @@ sample-data\combined_stats_ca.json</Environment>
     <Compile Include="feeder.node.js" />
     <Compile Include="fill-server-geoip.node.js" />
     <Compile Include="modules\geoip.js" />
-    <Compile Include="select-jsons.node.js" />
+    <Compile Include="merge-servers.node.js" />
     <Compile Include="modules\glicko1.js" />
     <Compile Include="modules\gamerating.js" />
     <Compile Include="recalc-glicko.node.js" />
@@ -48,9 +49,11 @@ sample-data\combined_stats_ca.json</Environment>
     <Compile Include="modules\webadmin.js" />
     <Compile Include="modules\webapi.js" />
     <Content Include="htdocs\servers.html" />
+    <Content Include="sample-data\api-server-players.json" />
     <Content Include="sample-data\combined_stats_ad.json" />
     <Content Include="sample-data\combined_stats_ca.json" />
     <Content Include="sample-data\combined_stats_ctf.json" />
+    <Content Include="sample-data\combined_stats_duel.json" />
     <Content Include="sample-data\combined_stats_ft.json" />
     <Content Include="sample-data\combined_stats_race.json" />
     <Content Include="sample-data\match_report.json" />

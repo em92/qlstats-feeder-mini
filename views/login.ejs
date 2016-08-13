@@ -1,0 +1,17 @@
+﻿<html>
+<head>
+  <link rel="stylesheet" type="text/css" href="qlstats.css" />  
+</head>
+<body>
+
+<% if (!user) { %>
+  <h1><%= conf.siteName %> Sign-in</h1>
+  To change your personal settings, <%= conf.siteName %> needs to know your Steam-ID.
+  <br>The next step will send you to a Steam page where you can grant access to that information.
+  <p><a href="auth/steam"><img src="/steam-signin.png" alt="Sign in through Steam"></a></p>
+<% } else { %>
+  <h2>Hello, <%= user.displayName %>. - <a href='logout'>Logout</a></h2>
+<% } %>
+
+</body>
+</html>

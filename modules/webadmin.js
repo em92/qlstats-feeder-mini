@@ -2,6 +2,9 @@
   bodyParser = require("body-parser"),
   fs = require("graceful-fs"),
   log4js = require("log4js"),
+  passport = require("passport"),
+  SteamStrategy = require("passport-steam").Strategy,
+  session = require("express-session"),
   pg = require("pg"),
   Q = require("q"),
   utils = require("./utils");
@@ -22,6 +25,7 @@ var _feeder = {
   writeConfig: function () { }
 };
 
+
 function init(config, app, feeder) {
   _config = config;
   _feeder = feeder;
@@ -30,6 +34,7 @@ function init(config, app, feeder) {
   var express = require("express");
   app.use(express.static(__dirname + "/../htdocs"));
   app.use(bodyParser.json());
+  app.use(bodyParser.urlencoded({ extended: true }));
 
   app.get("/", function(req, res) {
     res.redirect("/servers.html");
@@ -54,6 +59,95 @@ function init(config, app, feeder) {
       .catch(function(err) { res.json({ ok: false, msg: "internal error: " + err }); })
       .finally(function() { res.end(); });
   });
+
+
+  if (_config.webui.steamAuth && config.webui.steamAuth.apiKey)
+    initSteamAuthPages(app);
+}
+
+function initSteamAuthPages(app) {
+  // setup Steam OpenID 2.0 authenticator
+  passport.serializeUser(function(user, done) { done(null, user); });
+  passport.deserializeUser(function(obj, done) { done(null, obj); });
+  passport.use(new SteamStrategy(_config.webui.steamAuth,
+    function(identifier, profile, done) {
+      process.nextTick(function() {
+        profile.identifier = identifier;
+        return done(null, profile);
+      });
+    }
+  ));
+
+  app.set("views", __dirname + "/../views");
+  app.set("view engine", "ejs");
+  app.use(session({
+    secret: _config.webui.sessionSecret,
+    name: "Steam login session",
+    resave: true,
+    saveUninitialized: true
+  }));
+  app.use(passport.initialize());
+  app.use(passport.session());
+
+
+  app.get("/login", function(req, res) {
+    res.render("login", { user: req.user, conf: _config.webui });
+  });
+
+  app.get("/auth/steam", 
+    passport.authenticate("steam", { failureRedirect: "/login" }), 
+    function (req, res) {
+      res.redirect("/");
+    });
+
+  app.get("/auth/steam/return", 
+    passport.authenticate("steam", { failureRedirect: "/login" }),
+    function(req, res) {
+      res.redirect("/account");
+    });
+
+  app.get("/account", ensureAuthenticated, function(req, res) {
+    res.render("account", { user: req.user, conf: _config.webui, saved: false });
+  });
+  app.post("/account", ensureAuthenticated, function(req, res) {
+    saveUserSettings(req)
+      .then(function() {
+        res.render("account", { user: req.user, conf: _config.webui, saved: true });
+      })
+      .done();
+  });
+
+
+  app.get("/logout", function(req, res) {
+    req.logout();
+    res.redirect(_config.webui.postLogoutUrl);
+  });  
+}
+
+function ensureAuthenticated(req, res, next) {
+  if (req.isAuthenticated()) { return next(); }
+  res.redirect('/login');
+}
+
+function saveUserSettings(req) {
+  var set = "";
+  if (req.body.matchHistory)
+    set += ",privacy_match_hist=" + (req.body.matchHistory == "priv" ? "1" : "2");
+
+  if (set == "")
+    return Q(true);
+
+  set = set.substring(1);
+
+  return utils.dbConnect(_config.webapi.database)
+    .then(function(cli) {
+      return Q()
+        .then(function() {
+          var data = [req.user.id];
+          return Q.ninvoke(cli, "query", "update players set " + set + " where player_id=(select player_id from hashkeys where hashkey=$1)", data);
+        })
+        .finally(function() { cli.release(); });
+    });  
 }
 
 function getServerList() {

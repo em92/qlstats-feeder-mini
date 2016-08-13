@@ -22,6 +22,16 @@
     "enabled": true,
     "logLevel": "INFO",
     "database": "postgres://xonstat:xonstat@localhost/xonstatdb",
-    "aggregatePanelPorts": []
+    "aggregatePanelPorts": [ ]
+  },
+  "webui": {
+    "steamAuth": {
+      "returnURL": "http://yourdomain:8081/auth/steam/return",
+      "realm": "http://yourdomain:8081/",
+      "apiKey": "put-your-steam-API-key-here"
+    },
+    "siteName":  "myStatsSite",
+    "sessionSecret": "put-some-random-stuff-here",
+    "postLogoutUrl":  "http://localhost:8080/"
   }
 }

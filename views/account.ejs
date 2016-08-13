@@ -1,0 +1,27 @@
+﻿<html>
+<head>
+  <link rel="stylesheet" type="text/css" href="qlstats.css" />  
+</head>
+<body>
+
+<h1>Hello, <%= user.displayName %></h1>
+<!--Your Steam-ID is: <%= user.id; %> <br>-->
+
+<a href='logout'>Logout</a> | <a href='<%= conf.postLogoutUrl %>'>Return to main site</a> | <a href='<%= conf.postLogoutUrl %>player/<%=user.id%>'>My Stats</a>
+
+<form method="post">
+
+<h2>Privacy Settings</h2>
+<input type="radio" name="matchHistory" value="pub">Public: allow players to see my match history
+<br><input type="radio" name="matchHistory" value="priv">Private: do not show my match history
+
+<br>
+<br>
+<button type="submit">Save Settings</button>
+<% if (saved) { %>
+<br>Settings have been saved
+<% } %>
+</form>
+
+</body>
+</html>
