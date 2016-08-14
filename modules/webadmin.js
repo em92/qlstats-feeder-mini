@@ -61,7 +61,7 @@ function init(config, app, feeder) {
   });
 
 
-  if (_config.webui.steamAuth && config.webui.steamAuth.apiKey)
+  if (_config.webui && _config.webui.steamAuth && config.webui.steamAuth.apiKey)
     initSteamAuthPages(app);
 }
 
