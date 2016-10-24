@@ -125,7 +125,7 @@ function createGameTypeStrategy(gametype) {
     "duel": ["duel", "qcon_duel"],
     "ffa": ["ffa", "mg_ffa_classic"],
     "ca": ["ca", "capickup", "hoq_ca", "mg_ca_classic"],
-    "tdm": ["ctdm", "qcon_tdm", "mg_tdm_fullclassic", "tdm_classic", "hoq_tdm"],
+    "tdm": ["ctdm", "qcon_tdm", "mg_tdm_fullclassic", "tdm_classic", "hoq_tdm", "ftdm"],
     "ctf": ["ctf", "ctf2", "qcon_ctf", "hoq_ctf"],
     "ft": ["freeze", "cftag", "ft", "ftclassic", "ft_classic", "mg_ft_fullclassic", "vft"]
   }
@@ -133,7 +133,7 @@ function createGameTypeStrategy(gametype) {
     "duel": 2,
     "ffa": 4,
     "ca": 6,
-    "tdm": 6,
+    "tdm": 4,
     "ctf": 6,
     "ft": 6
   }
@@ -141,7 +141,7 @@ function createGameTypeStrategy(gametype) {
     "duel": function(game) { return game.matchStats.GAME_LENGTH >= 10 * 60 - 5 || game.matchStats.EXIT_MSG.indexOf("forfeited") >= 0 },
     "ffa": function(game) { return game.matchStats.FRAG_LIMIT >= 50 },
     "ca": function(game) { return Math.max(game.matchStats.TSCORE0, game.matchStats.TSCORE1) >= 8 || Math.abs(game.matchStats.TSCORE0 - game.matchStats.TSCORE1) >= 5 /* old JSONS have no ROUND_LIMIT */ },
-    "tdm": function(game) { return Math.max(game.matchStats.TSCORE0, game.matchStats.TSCORE1) >= 100 || Math.abs(game.matchStats.TSCORE0 - game.matchStats.TSCORE1) >= 50 || game.matchStats.GAME_LENGTH >= 15 * 60 },
+    "tdm": function(game) { return Math.max(game.matchStats.TSCORE0, game.matchStats.TSCORE1) >= 100 || Math.abs(game.matchStats.TSCORE0 - game.matchStats.TSCORE1) >= 30 || game.matchStats.GAME_LENGTH >= 15 * 60 },
     "ctf": function(game) { return Math.max(game.matchStats.TSCORE0, game.matchStats.TSCORE1) >= 8  || Math.abs(game.matchStats.TSCORE0 - game.matchStats.TSCORE1) >= 5 || game.matchStats.GAME_LENGTH >= 15 * 60 },
     "ft": function(game) { return Math.max(game.matchStats.TSCORE0, game.matchStats.TSCORE1) >= 8 || Math.abs(game.matchStats.TSCORE0 - game.matchStats.TSCORE1) >= 5 || game.matchStats.GAME_LENGTH >= 15 * 60 /* old JSONS have no ROUND_LIMIT */ }
   }
@@ -151,8 +151,8 @@ function createGameTypeStrategy(gametype) {
     "duel": function() { return false; },
     "ffa": function(a, b, game) { return Math.abs(a - b) <= 2 * Math.max(1, game.matchStats.FRAG_LIMIT/50) },
     "ca": function(a, b) { return Math.abs(a - b) <= 2 },
-    "tdm": function(a, b) { return Math.abs(a / b) <= 1.05 && Math.abs(b / a) <= 1.05 },
-    "ctf": function(a, b) { return a / b <= 1.05 && b / a <= 1.05 },
+    "tdm": function(a, b) { return a != 0 && b != 0 && Math.abs(a / b) <= 1.05 && Math.abs(b / a) <= 1.05 },
+    "ctf": function(a, b) { return a != 0 && b != 0 && a / b <= 1.05 && b / a <= 1.05 },
     "ft": function(a, b) { return Math.abs(a - b) <= 5; }
   }
 
