@@ -265,7 +265,7 @@ function startHttpd() {
   var webapi = require("./modules/webapi");
   webapi.init(_config, app, callbacks);
 
-  app.listen(_config.httpd.port);
+  app.listen(_config.httpd.port, _config.httpd.ip);
 }
 
 /**
