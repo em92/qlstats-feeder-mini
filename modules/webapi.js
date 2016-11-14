@@ -513,7 +513,7 @@ function getQtvEventStream(req, res) {
 
 // checks if the request is null or from a localhost IPv4 or IPv6
 function isInternalRequest(req) {
-  return !(req && req.connection.remoteAddress.indexOf("127.0.0.") < 0 && req.connection.remoteAddress != "::1");
+  return !req || !req.connection || !req.connection.remoteAddress || (req.connection.remoteAddress.indexOf("127.0.0.") < 0 && req.connection.remoteAddress != "::1");
 }
 
 
