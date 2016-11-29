@@ -642,6 +642,11 @@ function onZmqMessageCallback(conn, data) {
   }
   
   function onMatchReport() {
+    if (obj.DATA.ABORTED) {
+      _logger.debug(conn.addr + ": match aborted");
+      return Q();
+    }
+
     _logger.debug(conn.addr + ": match finished");
     Object.keys(conn.players).forEach(function (steamid) {
       var p = conn.players[steamid];
