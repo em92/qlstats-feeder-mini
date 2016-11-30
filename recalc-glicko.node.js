@@ -54,7 +54,7 @@ function parseCommandLine() {
     else if (args[0] == "-p2")
       mode = "part2";
     else if (args[0] == "-all")
-      gametypes = ["ctf", "tdm", "ft", "ffa", "ca", "duel"];
+      gametypes = ["ctf", "tdm", "ft", "ffa", "ca", "duel", "ad"];
     else if (args[0] == "-r")
       print = true;
     else if (args[0] == "-c")
