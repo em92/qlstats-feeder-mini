@@ -926,7 +926,9 @@ function createXonstatMatchReport(gt, game) {
     
     for (var i = 0; i < scoreboard.length; i++) {
       var p = scoreboard[i];
-      if ((team || p.TEAM) && p.TEAM != team)
+      // check if player's TEAM equals to team in function parameter
+      // redrover is not team-based gametype, but for some reason player is assigned to a team in match report
+      if (gt != "rr" && (team || p.TEAM) && p.TEAM != team)
         continue;
       report.push("P " + p.STEAM_ID);
       report.push("n " + p.NAME);
