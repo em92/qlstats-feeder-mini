@@ -127,6 +127,7 @@ function createGameTypeStrategy(gametype) {
     "ca": ["ca", "capickup", "hoq_ca", "mg_ca_classic"],
     "tdm": ["ctdm", "qcon_tdm", "mg_tdm_fullclassic", "tdm_classic", "hoq_tdm", "ftdm"],
     "ctf": ["ctf", "ctf2", "qcon_ctf", "hoq_ctf"],
+    "ad": ["ad"],
     "ft": ["freeze", "cftag", "ft", "ftclassic", "ft_classic", "mg_ft_fullclassic", "vft"]
   }
   var MinRequiredPlayersForGametype = {
@@ -135,6 +136,7 @@ function createGameTypeStrategy(gametype) {
     "ca": 6,
     "tdm": 4,
     "ctf": 6,
+    "ad": 6,
     "ft": 6
   }
   var ValidateMatchForGametype = {
@@ -143,6 +145,7 @@ function createGameTypeStrategy(gametype) {
     "ca": function(game) { return Math.max(game.matchStats.TSCORE0, game.matchStats.TSCORE1) >= 8 || Math.abs(game.matchStats.TSCORE0 - game.matchStats.TSCORE1) >= 5 /* old JSONS have no ROUND_LIMIT */ },
     "tdm": function(game) { return Math.max(game.matchStats.TSCORE0, game.matchStats.TSCORE1) >= 100 || Math.abs(game.matchStats.TSCORE0 - game.matchStats.TSCORE1) >= 30 || game.matchStats.GAME_LENGTH >= 15 * 60 },
     "ctf": function(game) { return Math.max(game.matchStats.TSCORE0, game.matchStats.TSCORE1) >= 8  || Math.abs(game.matchStats.TSCORE0 - game.matchStats.TSCORE1) >= 5 || game.matchStats.GAME_LENGTH >= 15 * 60 },
+    "ad": function(game) { return game.matchStats.SCORE_LIMIT >= 15 },
     "ft": function(game) { return Math.max(game.matchStats.TSCORE0, game.matchStats.TSCORE1) >= 8 || Math.abs(game.matchStats.TSCORE0 - game.matchStats.TSCORE1) >= 5 || game.matchStats.GAME_LENGTH >= 15 * 60 /* old JSONS have no ROUND_LIMIT */ }
   }
   
@@ -441,7 +444,7 @@ function extractDataFromGameObject(game) {
 
       var pd = playerData[p.STEAM_ID];
       if (!pd) {
-        pd = { id: p.STEAM_ID, name: p.NAME, timeRed: 0, timeBlue: 0, roundsRed: 0, roundsBlue: 0, score: 0, k: 0, d: 0, dg: 0, dt: 0, a: 0, win: false, quit: false };
+        pd = { id: p.STEAM_ID, name: p.NAME, timeRed: 0, timeBlue: 0, roundsRed: 0, roundsBlue: 0, score: 0, k: 0, d: 0, dg: 0, dt: 0, a: 0, win: false, c: 0, quit: false };
         playerData[p.STEAM_ID] = pd;
       }
 
@@ -464,6 +467,7 @@ function extractDataFromGameObject(game) {
       pd.k += p.KILLS;
       pd.d += p.DEATHS;
       pd.a += p.MEDALS.ASSISTS;
+      pd.c += p.MEDALS.CAPTURES;
       if (p.RANK == 1)
         pd.win = true;
       pd.quit |= p.QUIT;
@@ -585,6 +589,9 @@ function calcPlayerPerformance(p, raw) {
 
   if (gametype == "ft")
     return (p.dg / 100 + 0.5*(p.k - p.d) + 2*p.a) * timeFactor;
+
+  if (gametype == "ad")
+    return (p.dg / 100 + p.k + p.c) * timeFactor;
 
   // FFA, FT: score/time
   return p.score * timeFactor;

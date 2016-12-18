@@ -872,7 +872,7 @@ function processGameData(game) {
 }
 
 function isTeamGame(gt) {
-  return ",ca,tdm,ctf,ft,ad,dom,1fctf,harvester,".indexOf("," + gt + ",") >= 0;
+  return ",ca,tdm,ctf,ft,ad,a&d,dom,1fctf,harvester,".indexOf("," + gt + ",") >= 0;
 }
 
 /**
