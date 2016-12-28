@@ -66,9 +66,9 @@ function main() {
   StatsConnection.setLogger(_logger);
 
   // checking node version
-  if (semver.lt(process.versions.node, "4.0.0")) {
-    // "Promise" isn't part of node 0.x.y ... no idea why it worked until 2016-12-28 with node 0.10.29.
-    _logger.warn("node >= 4.0.0 required, but using node v" + process.versions.node);
+  if (semver.lt(process.versions.node, "0.11.13")) {
+    // "Promise" was introduced with node 0.11.13. No idea why it worked with 0.10.29 for a long time until 2016-12-28
+    _logger.warn("node >= 0.11.13 required, but using node v" + process.versions.node);
   }
   
   var filesToProcess = parseCommandLine();
