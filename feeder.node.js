@@ -66,8 +66,9 @@ function main() {
   StatsConnection.setLogger(_logger);
 
   // checking node version
-  if (semver.lt( process.versions.node, "0.12.0" ) ) {
-    _logger.warn("node >= 0.12.0 required, but using node v" + process.versions.node);
+  if (semver.lt(process.versions.node, "4.0.0")) {
+    // "Promise" isn't part of node 0.x.y ... no idea why it worked until 2016-12-28 with node 0.10.29.
+    _logger.warn("node >= 4.0.0 required, but using node v" + process.versions.node);
   }
   
   var filesToProcess = parseCommandLine();
@@ -219,7 +220,7 @@ function startFeeder() {
   Q(connectToServerList(_config.feeder.servers))
     .then(function(ok) {
       if (!ok) process.exit(1);
-    });
+    }).done();
 
   _logger.info("starting feeder");
 
@@ -232,7 +233,7 @@ function startFeeder() {
     timer = setTimeout(function() {
       timer = undefined;
       if (reloadConfig())
-        connectToServerList(_config.feeder.servers);
+        connectToServerList(_config.feeder.servers).done();
     }, 500);
   });
 }

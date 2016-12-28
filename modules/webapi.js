@@ -158,7 +158,8 @@ function getJson(req, res) {
     return Q(res.json({ ok: false, msg: "Date must be provided in YYYY-MM-DD format" }));
 
   var date = new Date(ts);
-  var dir = __dirname + "/../" + _config.feeder.jsondir + "/" + date.getUTCFullYear() + "-" + ("0" + (date.getUTCMonth() + 1)).substr(-2) + "/" + ("0" + date.getUTCDate()).substr(-2) + "/";
+  var dir = (_config.feeder.jsondir.startsWith("/") ? "" : __dirname + "/../") +
+      _config.feeder.jsondir + "/" + date.getUTCFullYear() + "-" + ("0" + (date.getUTCMonth() + 1)).substr(-2) + "/" + ("0" + date.getUTCDate()).substr(-2) + "/";
   var asGzip = req.path.substr(-3) == ".gz";
   var options = {
     root: dir,
