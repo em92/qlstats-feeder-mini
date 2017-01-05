@@ -128,7 +128,7 @@ function createGameTypeStrategy(gametype) {
     "tdm": ["ctdm", "qcon_tdm", "mg_tdm_fullclassic", "tdm_classic", "hoq_tdm", "ftdm"],
     "ctf": ["ctf", "ctf2", "qcon_ctf", "hoq_ctf"],
     "ad": ["ad"],
-    "ft": ["freeze", "cftag", "ft", "ftclassic", "ft_classic", "mg_ft_fullclassic", "vft"]
+    "ft": ["freeze", "cftag", "ft", "ftclassic", "ft_classic", "mg_ft_fullclassic", "vft", "ft_competitive"]
   }
   var MinRequiredPlayersForGametype = {
     "duel": 2,
