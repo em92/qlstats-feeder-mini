@@ -468,7 +468,7 @@ function extractDataFromGameObject(game) {
       pd.d += p.DEATHS;
       pd.a += p.MEDALS.ASSISTS;
       pd.c += p.MEDALS.CAPTURES;
-      if (p.RANK == 1)
+      if (p.RANK == 1 && !p.ABORTED) // when using map_restart, there might be multiple aborted entries before the real winner/loser entry in duel
         pd.win = true;
       pd.quit |= p.QUIT;
 
