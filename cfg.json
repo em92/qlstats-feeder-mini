@@ -9,7 +9,8 @@
     "servers": [
       "yourname:127.0.0.1:27960/statspass"
     ],
-    "calculateGlicko": true
+    "calculateGlicko": true,
+    "trackDuelEvents":  false 
   },
   "httpd": {
     "port": 8081

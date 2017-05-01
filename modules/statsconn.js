@@ -54,6 +54,8 @@ function StatsConnection(owner, ip, port, pass, onZmqMessageCallback, gamePort) 
   this.emitter = new events.EventEmitter();
   this.roundStats = [];
   this.quitters = [];
+
+  this.events = [];
 }
 
 StatsConnection.prototype.connect = function (isReconnect) {

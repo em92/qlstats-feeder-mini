@@ -500,6 +500,9 @@ function onZmqMessageCallback(conn, data) {
 
   //fs.writeFileSync("temp/" + obj.TYPE.toLowerCase() + ".json", msg);
 
+  if (_config.feeder.trackDuelEvents && conn.gameType == "duel")
+    conn.events.push({ time: now, event: obj });
+
   if (obj.TYPE == "PLAYER_CONNECT")
     setPlayerTeam(conn, obj.DATA, 3).time = now;
   else if (obj.TYPE == "PLAYER_DISCONNECT") {
@@ -525,16 +528,25 @@ function onZmqMessageCallback(conn, data) {
   else if (obj.TYPE == "PLAYER_DEATH") {
     setPlayerTeam(conn, obj.DATA.VICTIM).dead = true;
   }
-  else if (obj.TYPE == "MATCH_STARTED")
+  else if (obj.TYPE == "MATCH_STARTED") {
     onMatchStarted();
+    conn.gameType = obj.DATA.GAME_TYPE.toLowerCase();
+    conn.events = [ { time: now, event: obj } ];
+  }
   else if (obj.TYPE == "ROUND_OVER")
     onRoundOver(obj.DATA);
   else if (obj.TYPE == "PLAYER_STATS") {
     if (!obj.DATA.WARMUP)
       conn.playerStats.push(obj.DATA);
-  }
-  else if (obj.TYPE == "MATCH_REPORT")
+  } else if (obj.TYPE == "MATCH_REPORT") {
     onMatchReport();
+    if (_config.feeder.trackDuelEvents && conn.gameType == "duel") {
+      var file = _config.feeder.jsondir + "duel/" + obj.DATA.MATCH_GUID + ".json";
+      fs.writeFile(file, JSON.stringify(conn.events), function(err) {
+          _logger.error("failed to save duel stats file " + file + ": " + err);
+        });
+    }
+  }
 
   try {
     conn.emitter.emit('zmq', obj);
