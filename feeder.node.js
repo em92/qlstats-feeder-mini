@@ -143,7 +143,10 @@ function reloadConfig() {
       return false;
     }
 
-    var config = JSON.parse(fs.readFileSync(__dirname + "/" + _configFileName));
+    var json = fs.readFileSync(__dirname + "/" + _configFileName, { encoding: 'utf8' });
+    if (json.substr(-2) == "}}") // hack: sometimes writing the JSON config back to the file generates a double }} at the end of the file
+      json = json.substr(0, json.length - 1);
+    var config = JSON.parse(json);
     if (!(config.feeder.saveDownloadedJson || config.feeder.importDownloadedJson)) {
       _logger.error("At least one of feeder.saveDownloadedJson or feeder.importDownloadedJson must be set in " + _configFileName);
       return false;
