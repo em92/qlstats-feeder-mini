@@ -28,5 +28,8 @@
     "request": ">= 2.53.0",
     "semver": "^4.3.2",
     "zmq": ">=2.13.0"
+  },
+  "devDependencies": {
+    "es6-promise": "^4.0.5"
   }
 }
