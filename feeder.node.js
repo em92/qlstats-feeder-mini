@@ -364,8 +364,8 @@ function connectToServerList(servers) {
 
   // libzmq has a limit of max 1024 handles in a select() call. 1024 / 3 (sockets/connection) => 341 max
   // Linux also often has a file handle limit of 1024 (ulimit -n), which is reached even before that (~ 255).
-  if (servers.length > 300) {
-    _logger.error("Too many servers, maximum allowed is 300 (to stay below the hardcoded libzmq limit).");
+  if (servers.length > 340) {
+    _logger.error("Too many servers, maximum allowed is 340 (to stay below the hardcoded libzmq limit).");
     return false;
   }
 

@@ -97,7 +97,7 @@ function initSteamAuthPages(app) {
   app.get("/auth/steam", 
     passport.authenticate("steam", { failureRedirect: "/login" }), 
     function (req, res) {
-      res.redirect("/");
+      //res.redirect("/");
     });
 
   app.get("/auth/steam/return", 
