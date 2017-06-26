@@ -227,20 +227,6 @@ function startFeeder() {
 
   _logger.info("starting feeder");
 
-  // HACK: sometimes no connections are established when the process starts.
-  // in this case terminate the process after some delay and have the wrapper shell script restart it again
-  setTimeout(function () {
-    var connectedCount = 0;
-    for (var key in _statsConnections) {
-      if (_statsConnections.hasOwnProperty(key) && _statsConnections[key].connected)
-        ++connectedCount;
-    }
-    if (connectedCount === 0) {
-      _logger.error("No connections could be established within 5 sec. Terminating...");
-      process.exit(1);
-    }
-  }, 5000);
-
   // setup automatic config file reloading when the file changes
   var timer;
   fs.watch(__dirname + "/" + _configFileName, function() {
@@ -454,6 +440,20 @@ function connectToServerList(servers) {
         });
     });
   }
+
+  // HACK: sometimes no connections can be established after the config was reloaded.
+  // In this case terminate the process after some delay and have the wrapper shell script restart it again
+  setTimeout(function () {
+    var connectedCount = 0;
+    for (var key in _statsConnections) {
+      if (_statsConnections.hasOwnProperty(key) && _statsConnections[key].connected)
+        ++connectedCount;
+    }
+    if (connectedCount === 0) {
+      _logger.error("No connections could be established within 5 sec. Terminating...");
+      process.exit(1);
+    }
+  }, 5000);
 
   return ret
     .then(function (gamePorts) {
