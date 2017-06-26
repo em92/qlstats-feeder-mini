@@ -227,6 +227,20 @@ function startFeeder() {
 
   _logger.info("starting feeder");
 
+  // HACK: sometimes no connections are established when the process starts.
+  // in this case terminate the process after some delay and have the wrapper shell script restart it again
+  setTimeout(function () {
+    var connectedCount = 0;
+    for (var key in _statsConnections) {
+      if (_statsConnections.hasOwnProperty(key) && _statsConnections[key].connected)
+        ++connectedCount;
+    }
+    if (connectedCount === 0) {
+      _logger.error("No connections could be established within 5 sec. Terminating...");
+      process.exit(1);
+    }
+  }, 5000);
+
   // setup automatic config file reloading when the file changes
   var timer;
   fs.watch(__dirname + "/" + _configFileName, function() {
@@ -362,7 +376,7 @@ function connectToServerList(servers) {
     return false;
   }
 
-  // libzmq has a limit of max 1024 handles in a select() call. 1024 / 3 (sockets/connection) => 341 max
+  // libzmq has a limit of max 1024 handles in a select() call and uses 3 socets/connection => max 341 conns.
   // Linux also often has a file handle limit of 1024 (ulimit -n), which is reached even before that (~ 255).
   if (servers.length > 340) {
     _logger.error("Too many servers, maximum allowed is 340 (to stay below the hardcoded libzmq limit).");
