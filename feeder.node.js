@@ -863,6 +863,10 @@ function processGameData(game) {
 
   function aggregatePlayerStats() {
     var partialPlayTimes = game.playerStats.reduce(function (aggregate, data) {
+      // ignoring player stats from different match
+      if (game.matchStats.MATCH_GUID != data.MATCH_GUID)
+        return aggregate;
+
       var key = data.STEAM_ID + "_" + data.TEAM;
       var p = aggregate[key];
       if (!p)
