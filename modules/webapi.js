@@ -616,7 +616,7 @@ function getSkillRatings() {
   return _getPlayerSkillratingsCache.updatePromise = utils.dbConnect(_config.webapi.database)
     .then(function(cli) {
       return Q
-        .ninvoke(cli, "query", { name: "serverskill", text: "select hashkey, game_type_cd, g2_r, g2_rd, region from hashkeys h inner join player_elos e on e.player_id=h.player_id inner join players p on p.player_id=e.player_id where e.g2_games>=5" })
+        .ninvoke(cli, "query", { name: "serverskill", text: "select hashkey, game_type_cd, g2_r, g2_rd, region, b_r, b_rd from hashkeys h inner join player_elos e on e.player_id=h.player_id inner join players p on p.player_id=e.player_id where e.g2_games >= 5 or e.b_games >=5" })
         .then(function(result) {
           _getPlayerSkillratingsCache.data = mapSkillInfo(result.rows);
           _getPlayerSkillratingsCache.timestamp = Date.now();
@@ -634,7 +634,11 @@ function getSkillRatings() {
       var player = info[row.hashkey];
       if (!player)
         info[row.hashkey] = player = {};
-      player[row.game_type_cd] = { r: Math.round(row.g2_r), rd: Math.round(row.g2_rd), region: row.region };
+      player[row.game_type_cd] = {
+        r: Math.round(row.g2_r), rd: Math.round(row.g2_rd),
+        b_r:  Math.round(row.b_r), b_rd: Math.round(row.b_rd),
+        region: row.region
+      };
     });
     return info;
   }
