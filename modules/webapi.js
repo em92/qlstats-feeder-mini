@@ -195,21 +195,16 @@ function getServerPlayers(req, res) {
         .then(function(info) {
           var gt = info && info.gt || status.gt;
           var keys = status.p ? Object.keys(status.p) : [];
-          var serverinfo = calcServerInfo(zmqAddr, status, gt, ratings);
           var factory = info && info.raw.rules.g_factory || status.f;
-          if (gt && factory) {
-            var aRatings = getARatedFactories()[gt];
-            if (aRatings)
-              serverinfo.rating = aRatings.indexOf(factory) >= 0 ? "A" : "B";
-          }
+          var serverinfo = calcServerInfo(zmqAddr, status, gt, factory, ratings);
           var players = keys.reduce(function(result, steamid) {
             var player = status.p[steamid];
             if (!player.quit) {
               var rating = gt && ratings && ratings[steamid] ? ratings[steamid][gt] || {} : {};
               result.push({
                 steamid: steamid, name: player.name, team: player.team,
-                rating: aRatings.indexOf(factory) >= 0 ? rating.r : rating.b_r,
-                rd: aRatings.indexOf(factory) >= 0 ? rating.rd : rating.b_rd,
+                rating: serverinfo.rating == "A" ? rating.r : rating.b_r,
+                rd:  serverinfo.rating == "A" ? rating.rd : rating.b_rd,
                 time: player.time
               });
             }
@@ -298,6 +293,7 @@ function getServerSkillrating() {
       var conn = serverStatus[addr];
       var gameAddr = conn.gp ? addr.substr(0, addr.indexOf(":") + 1) + conn.gp : addr;
       var gt = conn.gt || (_getServerBrowserInfoCache[gameAddr] || {})["gt"];
+      var factory = (_getServerBrowserInfoCache[gameAddr] || {})["factory"];
       if (!gt) {
         // execute browser query in the background and put the result in the cache for the next call to this API
         Q.delay(delay += 10).then(function() {
@@ -306,7 +302,7 @@ function getServerSkillrating() {
         return;
       }
 
-      info.push(calcServerInfo(addr, conn, gt, skillInfo));
+      info.push(calcServerInfo(addr, conn, gt, factory, skillInfo));
     });
 
     _getServerSkillratingCache.timestamp = now;
@@ -568,7 +564,8 @@ function getServerBrowserInfo(gameAddr) {
       _logger.debug("received server browser information for " + gameAddr + ": state.error=" + state.error + ", map=" + ((state.raw||{}).rules||{}).mapname);
       if (!state.error && state.raw && state.raw.rules) {
         var gt = (GameTypes[parseInt(state.raw.rules.g_gametype)] || "").toLowerCase();
-        return _getServerBrowserInfoCache[gameAddr] = { time: Date.now(), gt: gt, raw: state.raw };
+        var factory = (state.raw.rules.g_factory || gt).toLowerCase();
+        return _getServerBrowserInfoCache[gameAddr] = { time: Date.now(), gt: gt, factory: factory, raw: state.raw };
       }
       return cached;
     })
@@ -578,12 +575,20 @@ function getServerBrowserInfo(gameAddr) {
 }
 
 // get addr, gt, min, avg, max (rating) and count of players, specs and bots for the given server
-function calcServerInfo(addr, serverStatus, gt, skillInfo) {
+function calcServerInfo(addr, serverStatus, gt, factory, skillInfo) {
   var totalRating = 0;
   var maxRating = 0;
   var minRating = 9999;
   var count = 0;
   var playerCount = 0, botCount = 0, specCount = 0;
+  var is_b_rated = false;
+
+  if ( gt && factory ) {
+    var aRatings = getARatedFactories()[gt];
+    if (aRatings && aRatings.indexOf(factory) == -1)
+      is_b_rated = true;
+  }
+
   Object.keys(serverStatus.p).reduce(function (prev, steamid) {
     var player = serverStatus.p[steamid];
     if (player.quit)
@@ -597,7 +602,7 @@ function calcServerInfo(addr, serverStatus, gt, skillInfo) {
     else
       ++playerCount;
     var playerRating = skillInfo[steamid];
-    var rating = playerRating && playerRating[gt] ? playerRating[gt].r : null;
+    var rating = playerRating && playerRating[gt] ? ( is_b_rated ? playerRating[gt].b_r : playerRating[gt].r ) : null;
     if (!rating) return;
     ++count;
     totalRating += rating;
@@ -607,6 +612,7 @@ function calcServerInfo(addr, serverStatus, gt, skillInfo) {
   return {
     server: addr, gt: gt, 
     min: count == 0 ? 0 : Math.round(minRating), avg: count == 0 ? 0 : Math.round(totalRating / count), max: Math.round(maxRating), 
+    rating: is_b_rated ? "B" : "A",
     pc: playerCount, sc: specCount, bc: botCount
   };  
 }
