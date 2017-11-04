@@ -48,21 +48,21 @@ function init(config, app, feeder) {
   app.get("/api/server/statusdump", function(req, res) {
     Q(getServerStatusdump(req))
       .then(function(obj) { res.json(obj); })
-      .catch(function(err) { res.json({ ok: false, msg: "internal error: " + err }); })
+      .catch(function(err) { res.json({ ok: false, msg: "internal error: " + err, stacktrace: err.stack }); })
       .finally(function() { res.end(); });
   });
 
   app.get("/api/player/:id/locate", function(req, res) {
     Q(locatePlayer(req, res))
       .then(function (obj) { res.json(obj); })
-      .catch(function (err) { res.json({ ok: false, msg: "internal error: " + err }); })
+      .catch(function (err) { res.json({ ok: false, msg: "internal error: " + err, stacktrace: err.stack }); })
       .finally(function () { res.end(); });
   });
   
   app.get("/api/qtv/:addr/stream", function (req, res) {
     Q(getQtvEventStream(req, res))
       .then(function (obj) { res.json(obj); })
-      .catch(function (err) { res.json({ ok: false, msg: "internal error: " + err }); })
+      .catch(function (err) { res.json({ ok: false, msg: "internal error: " + err, stacktrace: err.stack }); })
       .finally(function () { res.end(); });
   });
 
@@ -74,48 +74,48 @@ function init(config, app, feeder) {
   app.get("/api/jsons", function(req, res) {
     Q(queryJson(req))
       .then(function(obj) { res.json(obj); })
-      .catch(function(err) { res.json({ ok: false, msg: "internal error: " + err }); })
+      .catch(function(err) { res.json({ ok: false, msg: "internal error: " + err, stacktrace: err.stack }); })
       .finally(function() { res.end(); });
   });
 
   app.get("/api/jsons/:date/:file.json(.gz)?", function(req, res) {
     Q(getJson(req, res))
-      .catch(function(err) { res.json({ ok: false, msg: "internal error: " + err }); })
+      .catch(function(err) { res.json({ ok: false, msg: "internal error: " + err, stacktrace: err.stack }); })
       .finally(function() { res.end(); });
   });
 
   app.get("/api/server/skillrating", function(req, res) {
     Q(getServerSkillrating(req))
       .then(function(obj) { res.json(obj); })
-      .catch(function(err) { res.json({ ok: false, msg: "internal error: " + err }); })
+      .catch(function(err) { res.json({ ok: false, msg: "internal error: " + err, stacktrace: err.stack }); })
       .finally(function() { res.end(); });
   });
 
   app.get("/api/server/:addr/players", function(req, res) {
     Q(getServerPlayers(req, res))
       .then(function(obj) { res.json(obj); })
-      .catch(function(err) { res.json({ ok: false, msg: "internal error: " + err }); })
+      .catch(function(err) { res.json({ ok: false, msg: "internal error: " + err, stacktrace: err.stack }); })
       .finally(function() { res.end(); });
   });
 
   app.get("/api/a_rated_factories", function(req, res) {
     Q(getARatedFactories(req))
       .then(function (obj) { res.json(obj); })
-      .catch(function (err) { res.json({ ok: false, msg: "internal error: " + err }); })
+      .catch(function (err) { res.json({ ok: false, msg: "internal error: " + err, stacktrace: err.stack }); })
       .finally(function () { res.end(); });
   });
 
   app.get("/api/nowplaying", function(req, res) {
     Q(getProsNowPlaying(req, res))
       .then(function (obj) { res.json(obj); })
-      .catch(function (err) { res.json({ ok: false, msg: "internal error: " + err }); })
+      .catch(function (err) { res.json({ ok: false, msg: "internal error: " + err, stacktrace: err.stack }); })
       .finally(function () { res.end(); });
   });
 
   app.get("/api/qtv/:addr/url", function (req, res) {
     Q(getQtvEventStreamUrl(req, res))
       .then(function (obj) { res.json(obj); })
-      .catch(function (err) { res.json({ ok: false, msg: "internal error: " + err }); })
+      .catch(function (err) { res.json({ ok: false, msg: "internal error: " + err, stacktrace: err.stack }); })
       .finally(function () { res.end(); });
   });
 
