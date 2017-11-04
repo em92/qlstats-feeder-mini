@@ -581,12 +581,12 @@ function calcServerInfo(addr, serverStatus, gt, factory, skillInfo) {
   var minRating = 9999;
   var count = 0;
   var playerCount = 0, botCount = 0, specCount = 0;
-  var is_b_rated = false;
+  var is_b_rated = true;
 
   if ( gt && factory ) {
     var aRatings = getARatedFactories()[gt];
-    if (aRatings && aRatings.indexOf(factory) == -1)
-      is_b_rated = true;
+    if (aRatings && aRatings.indexOf(factory) > -1)
+      is_b_rated = false;
   }
 
   Object.keys(serverStatus.p).reduce(function (prev, steamid) {
