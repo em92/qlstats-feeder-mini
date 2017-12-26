@@ -9,7 +9,7 @@
 
 // calculate a value for "c" so that an average RD value of 30 changes back to 350 when a player is inactive for 720 rating periods (=days)
 // the default rating value must be kept in-sync with the value for the /elo API in player.py
-var g2 = new glicko.Glicko({ rating: 1337, rd: 350, c: Math.sqrt((Math.pow(350, 2) - Math.pow(30, 2)) / 720) });
+var g2 = new glicko.Glicko({ rating: 900, rd: 350, c: Math.sqrt((Math.pow(350, 2) - Math.pow(30, 2)) / 720) });
 
 // values for DB column games.g2_status
 var
@@ -585,7 +585,7 @@ function calcPlayerPerformance(p, raw) {
 
   // then use score/rounds for CA
   if (gametype == "ca")
-    return (p.dg / 100 + 0.25*p.k) * timeFactor * (p.win ? 1.2 : 1.0);
+    return (p.score - 0.75*p.k) * timeFactor * (p.win ? 1.2 : 1.0);
 
   if (gametype == "ft")
     return (p.dg / 100 + 0.5*(p.k - p.d) + 2*p.a) * timeFactor;
