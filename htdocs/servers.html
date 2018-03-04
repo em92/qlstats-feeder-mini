@@ -226,17 +226,17 @@
   }
 
   function main() {
-    var panels = [8081, 8082, 8083, 8084 ];
+    //var panels = [":8081", ":8082", ":8083", ":8084" ];
+    var panels = ["/panel1", "/panel2", "/panel3", "/panel4"];
     if (panels.length > 1) {
       var sep = "";
       for (var i = 0; i < panels.length; i++) {
-        $("#panelLinks").append(sep + "<a href='http://" + location.hostname + ":" + panels[i] + "'>Panel " + (i + 1) + "</a>");
+        $("#panelLinks").append(sep + "<a href='" + location.protocol + "//" + location.hostname + panels[i] + "'>Panel " + (i + 1) + "</a>");
         sep = " | ";
+        if ((location.href + "/").indexOf(panels[i] + "/") >= 0)
+          $("h1").append(" " + (i + 1));
       }
       $("#panels").css("display", "block");
-      var i = panels.indexOf(parseInt(location.port));
-      if (i >= 0)
-        $("h1").append(" " + (i + 1));
     }
 
     fillServerList();
