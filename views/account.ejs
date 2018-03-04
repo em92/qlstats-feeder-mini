@@ -3,6 +3,9 @@
   <link rel="stylesheet" type="text/css" href="qlstats.css" />  
   <style>
      a, a:hover, a:active, a:visited { color: orange; }
+	 .opt-out {color:red;}
+	 .opt-in-private {color:yellow;}
+	 .opt-in-public {color:green;}
   </style>
 </head>
 <body>
@@ -15,8 +18,9 @@
 <form method="post">
 
 <h2>Privacy Settings</h2>
-<input type="radio" name="matchHistory" value="pub">Public: allow players to see my match history
-<br><input type="radio" name="matchHistory" value="priv">Private: do not show my match history
+<input type="radio" name="matchHistory" value="3" <%= player.privacy_match_hist == 3 ? "checked" : "" %>><span class="opt-out">Not tracked:</span> No ratings, no stats. NOTE: server owners may deny you access to ranked servers
+<br><input type="radio" name="matchHistory" value="1" <%= player.privacy_match_hist == 1 ? "checked" : "" %>><span class="opt-in-private">Private:</span> Your ratings and aliases are accessible, your match history is private
+<br><input type="radio" name="matchHistory" value="2" <%= player.privacy_match_hist == 2 ? "checked" : "" %>><span class="opt-in-public">Public:</span> Everyone can see your ratings and match history
 
 <br>
 <br>
@@ -25,6 +29,40 @@
 <br>Settings have been saved
 <% } %>
 </form>
+
+<h2>Data stored by qlstats</h2>
+
+Tied to a player's steam-id:
+<ul>
+  <li>Match results</li>
+  <li>Weapon stats</li>
+  <li>Skill ratings for various game types</li>
+  <li>Status information</li>
+</ul>
+
+<p/>
+qlstats does NOT store any personal information like real name, e-mail address, ip-address.
+
+<h2>Implications of opt-in/out</h2>
+Quake Live game server owners can register their servers with qlstats so that they send match results to qlstats.net for processing.
+
+<p><b>Until May 2018</b>
+<br>qlstats stores all received match results.
+<br>Players who didn't opt out explicitly are treated as "Public".
+</p>
+
+<p><b>Effective May 2018</b>
+<br>Only if all the players in the match opted in to allow tracking, qlstats will store the match data and calculate player skill ratings.
+<br>If even a single player did not opt in, the match will not be processed at all, effecting all its players.
+<br>Players without an explicit opt-in are treated as "not tracked".
+</p>
+
+<p><b>Data accessible through qlstats</b>
+<br>If a player decides to opt-out, any existing existing match data will remain in the system to maintain the match history for all the other players.
+<br>Information can only be retrieved for players who are currently opted in:
+<br>Game servers can use an API to retieve rating information to allow skill based team blancing.
+<br>People can browse a player's match history, if that player has his profile set to public.
+</p>
 
 </body>
 </html>

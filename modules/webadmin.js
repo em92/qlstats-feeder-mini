@@ -106,14 +106,17 @@ function initSteamAuthPages(app) {
       res.redirect("/account");
     });
 
-  app.get("/account", ensureAuthenticated, function(req, res) {
-    res.render("account", { user: req.user, conf: _config.webui, saved: false });
+  app.get("/account", ensureAuthenticated, function (req, res) {
+      loadUserSettings(req)
+          .then(function(player) {
+              res.render("account", { user: req.user, conf: _config.webui, saved: false, player: player });
+          });
   });
   app.post("/account", ensureAuthenticated, function(req, res) {
     saveUserSettings(req)
-      .then(function() {
-        res.render("account", { user: req.user, conf: _config.webui, saved: true });
-      })
+        .then(function () {
+            res.redirect("/account");
+        })
       .done();
   });
 
@@ -129,10 +132,25 @@ function ensureAuthenticated(req, res, next) {
   res.redirect('/login');
 }
 
+function loadUserSettings(req) {
+    return utils.dbConnect(_config.webapi.database)
+        .then(function (cli) {
+            return Q()
+                .then(function () {
+                    var data = [req.user.id];
+                    return Q.ninvoke(cli, "query", "select * from players where player_id=(select player_id from hashkeys where hashkey=$1)", data);
+                })
+                .then(function (result) {
+                    return result.rows && result.rows.length > 0 ? result.rows[0] : {};
+                })
+                .finally(function () { cli.release(); });
+        });
+}
+
 function saveUserSettings(req) {
   var set = "";
-  if (req.body.matchHistory)
-    set += ",privacy_match_hist=" + (req.body.matchHistory == "priv" ? "1" : "2");
+  if (["1","2","3"].indexOf(req.body.matchHistory) >= 0)
+    set += ",privacy_match_hist=" + req.body.matchHistory;
 
   if (set == "")
     return Q(true);
