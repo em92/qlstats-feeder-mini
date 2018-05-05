@@ -183,12 +183,15 @@ function upgradeConfigVersion() {
   if (_config.webadmin)
     delete _config.webadmin.database;
   else
-    _config.webadmin = { enabled: false, logLevel: "INFO" };
+    _config.webadmin = { enabled: false, logLevel: "INFO", urlprefix: "/panel1" };
   if (!_config.webadmin.logLevel)
     _config.webadmin.logLevel = "INFO";
 
   if (!_config.webapi)
-    _config.webapi = { enabled: false, logLevel: "INFO", database: "postgres://xonstat:xonstat@localhost/xonstatdb" };
+    _config.webapi = { enabled: false, logLevel: "INFO", database: "postgres://xonstat:xonstat@localhost/xonstatdb", urlprefix: "/api" };
+
+  if (!_config.webui)
+    _config.webui = { enabled: false, urlprefix: "/account" };
 
   if (!_config.feeder.xonstatSubmissionUrl) {
     var port = _config.feeder.xonstatPort;
