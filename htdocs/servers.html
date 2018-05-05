@@ -231,7 +231,7 @@
     if (panels.length > 1) {
       var sep = "";
       for (var i = 0; i < panels.length; i++) {
-        $("#panelLinks").append(sep + "<a href='" + location.protocol + "//" + location.hostname + panels[i] + "'>Panel " + (i + 1) + "</a>");
+        $("#panelLinks").append(sep + "<a href='" + location.protocol + "//" + location.hostname + ":" + location.port + panels[i] + "'>Panel " + (i + 1) + "</a>");
         sep = " | ";
         if ((location.href + "/").indexOf(panels[i] + "/") >= 0)
           $("h1").append(" " + (i + 1));
