@@ -202,6 +202,13 @@ function upgradeConfigVersion() {
   if (typeof (_config.webapi.aggregatePanelPorts) == "undefined")
     _config.webapi.aggregatePanelPorts = [];
 
+  if (!_config.webadmin.urlprefix)
+    _config.webadmin.urlprefix = "";
+  if (!_config.webapi.urlprefix)
+    _config.webapi.urlprefix = "";
+  if (!_config.webui.urlprefix)
+    _config.webui.urlprefix = "";
+
   return JSON.stringify(_config) != oldConfig;
 }
 
@@ -236,7 +243,7 @@ function startFeeder() {
     timer = setTimeout(function() {
       timer = undefined;
       if (reloadConfig())
-        connectToServerList(_config.feeder.servers).done();
+        Q(connectToServerList(_config.feeder.servers)).done();
     }, 500);
   });
 }

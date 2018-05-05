@@ -45,21 +45,23 @@ function init(config, app, feeder) {
 
   // Internal API methods
 
-  app.get("/api/server/statusdump", function(req, res) {
+  var prefix = _config.webapi.urlprefix;
+
+  app.get(prefix + "/server/statusdump", function(req, res) {
     Q(getServerStatusdump(req))
       .then(function(obj) { res.json(obj); })
       .catch(function(err) { res.json({ ok: false, msg: "internal error: " + err, stacktrace: err.stack }); })
       .finally(function() { res.end(); });
   });
 
-  app.get("/api/player/:id/locate", function(req, res) {
+  app.get(prefix + "/player/:id/locate", function(req, res) {
     Q(locatePlayer(req, res))
       .then(function (obj) { res.json(obj); })
       .catch(function (err) { res.json({ ok: false, msg: "internal error: " + err, stacktrace: err.stack }); })
       .finally(function () { res.end(); });
   });
   
-  app.get("/api/qtv/:addr/stream", function (req, res) {
+  app.get(prefix + "/qtv/:addr/stream", function (req, res) {
     Q(getQtvEventStream(req, res))
       .then(function (obj) { res.json(obj); })
       .catch(function (err) { res.json({ ok: false, msg: "internal error: " + err, stacktrace: err.stack }); })
@@ -71,48 +73,48 @@ function init(config, app, feeder) {
 
   // Public API methods
 
-  app.get("/api/jsons", function(req, res) {
+  app.get(prefix + "/jsons", function(req, res) {
     Q(queryJson(req))
       .then(function(obj) { res.json(obj); })
       .catch(function(err) { res.json({ ok: false, msg: "internal error: " + err, stacktrace: err.stack }); })
       .finally(function() { res.end(); });
   });
 
-  app.get("/api/jsons/:date/:file.json(.gz)?", function(req, res) {
+  app.get(prefix + "/jsons/:date/:file.json(.gz)?", function(req, res) {
     Q(getJson(req, res))
       .catch(function(err) { res.json({ ok: false, msg: "internal error: " + err, stacktrace: err.stack }); })
       .finally(function() { res.end(); });
   });
 
-  app.get("/api/server/skillrating", function(req, res) {
+  app.get(prefix + "/server/skillrating", function(req, res) {
     Q(getServerSkillrating(req))
       .then(function(obj) { res.json(obj); })
       .catch(function(err) { res.json({ ok: false, msg: "internal error: " + err, stacktrace: err.stack }); })
       .finally(function() { res.end(); });
   });
 
-  app.get("/api/server/:addr/players", function(req, res) {
+  app.get(prefix + "/server/:addr/players", function(req, res) {
     Q(getServerPlayers(req, res))
       .then(function(obj) { res.json(obj); })
       .catch(function(err) { res.json({ ok: false, msg: "internal error: " + err, stacktrace: err.stack }); })
       .finally(function() { res.end(); });
   });
 
-  app.get("/api/a_rated_factories", function(req, res) {
+  app.get(prefix + "/a_rated_factories", function(req, res) {
     Q(getARatedFactories(req))
       .then(function (obj) { res.json(obj); })
       .catch(function (err) { res.json({ ok: false, msg: "internal error: " + err, stacktrace: err.stack }); })
       .finally(function () { res.end(); });
   });
 
-  app.get("/api/nowplaying", function(req, res) {
+  app.get(prefix + "/nowplaying", function(req, res) {
     Q(getProsNowPlaying(req, res))
       .then(function (obj) { res.json(obj); })
       .catch(function (err) { res.json({ ok: false, msg: "internal error: " + err, stacktrace: err.stack }); })
       .finally(function () { res.end(); });
   });
 
-  app.get("/api/qtv/:addr/url", function (req, res) {
+  app.get(prefix + "/qtv/:addr/url", function (req, res) {
     Q(getQtvEventStreamUrl(req, res))
       .then(function (obj) { res.json(obj); })
       .catch(function (err) { res.json({ ok: false, msg: "internal error: " + err, stacktrace: err.stack }); })
@@ -248,7 +250,7 @@ function locatePlayer(req, res) {
 
   var tasks = [];
   _config.webapi.aggregatePanelPorts.forEach(function(port) {
-    tasks.push(getJsonFromPort(port, "/api/player/" + steamid + "/locate"));
+    tasks.push(getJsonFromPort(port, "/player/" + steamid + "/locate"));
   });
   return Q
     .allSettled(tasks)
@@ -435,7 +437,7 @@ function getQtvEventStreamUrl(req, res) {
       addr = data[2];
       var zmqAddr = portMap[addr] || addr;
       var api = status[zmqAddr].api;
-      return { ok: true, streamUrl: req.protocol + "://" + req.hostname + ":" + api + "/api/qtv/" + zmqAddr + "/stream" };
+      return { ok: true, streamUrl: req.protocol + "://" + req.hostname + ":" + api + "/qtv/" + zmqAddr + "/stream" };
     });
 }
 
@@ -684,7 +686,7 @@ function getAggregatedServerStatusData() {
 
   // load status dump from a different admin panel port and aggregate the information
   function getStatusdumpFromPort(port) {
-    return getJsonFromPort(port, "/api/server/statusdump")
+    return getJsonFromPort(port, "/server/statusdump")
       .then(function(info) {
         for (var key in info) {
           if (!info.hasOwnProperty(key)) continue;

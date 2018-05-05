@@ -31,29 +31,33 @@ function init(config, app, feeder) {
   _feeder = feeder;
   _logger.setLevel(config.webadmin.logLevel || "INFO");
 
+
   var express = require("express");
-  app.use(express.static(__dirname + "/../htdocs"));
   app.use(bodyParser.json());
   app.use(bodyParser.urlencoded({ extended: true }));
 
-  app.get("/", function(req, res) {
-    res.redirect("/servers.html");
+  var prefix = _config.webadmin.urlprefix;
+
+  app.use(prefix, express.static(__dirname + "/../htdocs"));
+
+  app.get(prefix + "/", function(req, res) {
+    res.redirect("servers.html");
   });
 
-  app.get("/api/servers", function (req, res) {
-    _logger.info(req.connection.remoteAddress + ": /api/servers ");
+  app.get(prefix + "/api/servers", function (req, res) {
+    _logger.info(req.connection.remoteAddress + ": " + prefix + "/api/servers ");
     res.jsonp(getServerList());
     res.end();
   });
 
-  app.post("/api/addserver", function (req, res) {
-    _logger.info(req.connection.remoteAddress + ": /api/addserver " + JSON.stringify(req.body));
+  app.post(prefix + "/api/addserver", function (req, res) {
+    _logger.info(req.connection.remoteAddress + ": " + prefix + "/api/addserver " + JSON.stringify(req.body));
     res.json(addServer(req.body));
     res.end();
   });
 
-  app.post("/api/editserver", function (req, res) {
-    _logger.info(req.connection.remoteAddress + ": /api/editserver " + JSON.stringify(req.body));
+  app.post(prefix + "/api/editserver", function (req, res) {
+    _logger.info(req.connection.remoteAddress + ": " + prefix + "/api/editserver " + JSON.stringify(req.body));
     Q(updateServers(req.body))
       .then(function(obj) { res.json(obj); })
       .catch(function(err) { res.json({ ok: false, msg: "internal error: " + err }); })
@@ -62,10 +66,10 @@ function init(config, app, feeder) {
 
 
   if (_config.webui && _config.webui.steamAuth && config.webui.steamAuth.apiKey)
-    initSteamAuthPages(app);
+    initSteamAuthPages(express, app);
 }
 
-function initSteamAuthPages(app) {
+function initSteamAuthPages(express, app) {
   // setup Steam OpenID 2.0 authenticator
   passport.serializeUser(function(user, done) { done(null, user); });
   passport.deserializeUser(function(obj, done) { done(null, obj); });
@@ -77,6 +81,10 @@ function initSteamAuthPages(app) {
       });
     }
   ));
+
+  var prefix = _config.webui.urlprefix;
+
+  app.use(prefix, express.static(__dirname + "/../htdocs"));
 
   app.set("views", __dirname + "/../views");
   app.set("view engine", "ejs");
@@ -90,38 +98,38 @@ function initSteamAuthPages(app) {
   app.use(passport.session());
 
 
-  app.get("/login", function(req, res) {
+  app.get(prefix + "/login", function(req, res) {
     res.render("login", { user: req.user, conf: _config.webui });
   });
 
-  app.get("/auth/steam", 
-    passport.authenticate("steam", { failureRedirect: "/login" }), 
+  app.get(prefix + "/auth/steam", 
+    passport.authenticate("steam", { failureRedirect: prefix + "/login" }), 
     function (req, res) {
       //res.redirect("/");
     });
 
-  app.get("/auth/steam/return", 
-    passport.authenticate("steam", { failureRedirect: "/login" }),
+  app.get(prefix + "/auth/steam/return", 
+    passport.authenticate("steam", { failureRedirect: prefix + "/login" }),
     function(req, res) {
-      res.redirect("/account");
+      res.redirect(prefix + "");
     });
 
-  app.get("/account", ensureAuthenticated, function (req, res) {
+  app.get(prefix + "", ensureAuthenticated, function (req, res) {
       loadUserSettings(req)
           .then(function(player) {
               res.render("account", { user: req.user, conf: _config.webui, saved: false, player: player });
           });
   });
-  app.post("/account", ensureAuthenticated, function(req, res) {
+  app.post(prefix + "", ensureAuthenticated, function(req, res) {
     saveUserSettings(req)
         .then(function () {
-            res.redirect("/account");
+            res.redirect(prefix + "");
         })
       .done();
   });
 
 
-  app.get("/logout", function(req, res) {
+  app.get(prefix + "/logout", function(req, res) {
     req.logout();
     res.redirect(_config.webui.postLogoutUrl);
   });  
@@ -129,7 +137,7 @@ function initSteamAuthPages(app) {
 
 function ensureAuthenticated(req, res, next) {
   if (req.isAuthenticated()) { return next(); }
-  res.redirect('/login');
+  res.redirect(_config.webui.urlprefix + '/login');
 }
 
 function loadUserSettings(req) {

@@ -23,6 +23,7 @@
 -f -u tdm
 sample-data\combined_stats_duel.json
  -g 19498 sample-data\combined_stats_ca.json</Environment>
+    <LastActiveSolutionConfig>Debug|Any CPU</LastActiveSolutionConfig>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)' == 'Debug'" />
   <PropertyGroup Condition="'$(Configuration)' == 'Release'" />
@@ -106,6 +107,7 @@ sample-data\combined_stats_duel.json
     <Folder Include="typings\express\" />
     <Folder Include="typings\globals\" />
     <Folder Include="typings\globals\async\" />
+    <Folder Include="typings\globals\es6-promise\" />
     <Folder Include="typings\globals\express-session\" />
     <Folder Include="typings\globals\http-errors\" />
     <Folder Include="typings\globals\node\" />
@@ -122,6 +124,7 @@ sample-data\combined_stats_duel.json
   <ItemGroup>
     <TypeScriptCompile Include="typings\express\express.d.ts" />
     <TypeScriptCompile Include="typings\globals\async\index.d.ts" />
+    <TypeScriptCompile Include="typings\globals\es6-promise\index.d.ts" />
     <TypeScriptCompile Include="typings\globals\express-session\index.d.ts" />
     <TypeScriptCompile Include="typings\globals\http-errors\index.d.ts" />
     <TypeScriptCompile Include="typings\globals\node\index.d.ts" />
