@@ -28,8 +28,11 @@ sample-data\combined_stats_duel.json
   <PropertyGroup Condition="'$(Configuration)' == 'Debug'" />
   <PropertyGroup Condition="'$(Configuration)' == 'Release'" />
   <ItemGroup>
+    <Compile Include="delete-player.node.js" />
     <Compile Include="modules\utils.js" />
+    <Compile Include="modules\webui.js" />
     <Compile Include="validate-glicko.node.js" />
+    <Content Include="mycfg.json" />
     <Content Include="post-data.txt" />
     <Content Include="cfg.json" />
     <Content Include="cfg2.json" />
@@ -70,7 +73,10 @@ sample-data\combined_stats_duel.json
     <Content Include="sample-data\player_switchteam.json" />
     <Content Include="sample-data\round_over.json" />
     <Content Include="views\account.ejs" />
+    <Content Include="views\footer.ejs" />
+    <Content Include="views\header.ejs" />
     <Content Include="views\login.ejs" />
+    <Content Include="views\privacy_policy.ejs" />
   </ItemGroup>
   <ItemGroup>
     <Folder Include="htdocs" />

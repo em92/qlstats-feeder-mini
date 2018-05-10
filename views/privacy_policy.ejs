@@ -1,0 +1,34 @@
+<h2>Data stored by qlstats</h2>
+
+Tied to a player's steam-id:
+<ul>
+  <li>Match results</li>
+  <li>Weapon stats</li>
+  <li>Skill ratings for various game types</li>
+  <li>Status information</li>
+</ul>
+
+<p/>
+qlstats does NOT store any personal information like real name, e-mail address, ip-address.
+
+<h2>Implications of opt-in/out</h2>
+Quake Live game server owners can register their servers with qlstats so that they send match results to qlstats.net for processing.
+
+<p><b>Until May 2018</b>
+  <br>qlstats stores all received match results.
+    <br>Players who didn't opt out explicitly are treated as "Public".
+</p>
+
+<p><b>Effective May 2018</b>
+  <br>Only if all the players in the match opted in to allow tracking, qlstats will store the match data and calculate player skill ratings.
+    <br>If even a single player did not opt in, the match will not be processed at all, effecting all its players.
+      <br>Players without an explicit opt-in are treated as "not tracked".
+</p>
+
+<p><b>Data accessible through qlstats</b>
+  <br>If a player decides to opt-out, any existing existing match data will remain in the system to maintain the match history for all the other players.
+    <br>Information can only be retrieved for players who are currently opted in:
+      <br>Game servers can use an API to retieve rating information to allow skill based team blancing.
+        <br>People can browse a player's match history, if that player has his profile set to public.
+</p>
+

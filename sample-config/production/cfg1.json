@@ -1,0 +1,42 @@
+{
+  "webadmin": {
+    "enabled": true,
+    "logLevel": "INFO",
+    "urlprefix":  "/panel1"
+  },
+  "webui": {
+    "enabled": true, 
+    "steamAuth": {
+      "returnURL": "https://qlstats.net/account/auth/steam/return",
+      "realm": "https://qlstats.net/",
+      "apiKey": "$$steam-api-key",
+      "profile": true
+    },
+    "siteName": "qlstats.net",
+    "sessionSecret": "23hk23h5kjh21gpsv98721hyx12bxyvz902jafdp",
+    "postLogoutUrl": "https://qlstats.net/account/logout",
+    "urlprefix": "/account"
+  },
+  "feeder": {
+    "saveDownloadedJson": true,
+    "importDownloadedJson": true,
+    "jsondir": "/mnt/vdb/ql-match-jsons/",
+    "logLevel": "INFO",
+    "trackDuelEvents": false,
+    "xonstatSubmissionUrl": "http://localhost:8080/stats/submit",
+    "servers": [
+      "DummyOwner:127.0.0.1:27961/stats"
+    ],
+    "calculateGlicko": true
+  },
+  "httpd": {
+    "port": 8081,
+    "ip": "127.0.0.1"
+  },
+  "webapi": {
+    "enabled": false,
+    "logLevel": "INFO",
+    "database": "postgres://xonstat:xonstat@localhost/xonstatdb",
+    "aggregatePanelPorts": []
+  }
+}

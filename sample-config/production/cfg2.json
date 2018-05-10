@@ -1,0 +1,31 @@
+{
+  "webadmin": {
+    "enabled": true,
+    "logLevel": "INFO",
+    "urlprefix": "/panel2"
+  },
+  "webui": {},
+  "feeder": {
+    "saveDownloadedJson": true,
+    "importDownloadedJson": true,
+    "jsondir": "/mnt/vdb/ql-match-jsons/",
+    "xonstatSubmissionUrl": "http://localhost:8080/stats/submit",
+    "logLevel": "INFO",
+    "trackDuelEvents": false,
+    "servers": [
+      "DummyOwner:127.0.0.1:27962/stats"
+    ],
+    "calculateGlicko": true
+  },
+  "httpd": {
+    "enabled": true,
+    "port": 8082,
+    "ip": "127.0.0.1"
+  },
+  "webapi": {
+    "enabled": false,
+    "logLevel": "INFO",
+    "database": "postgres://xonstat:xonstat@localhost/xonstatdb",
+    "aggregatePanelPorts": []
+  }
+}

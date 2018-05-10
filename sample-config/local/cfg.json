@@ -1,0 +1,48 @@
+{
+  "feeder": {
+    "enabled": true,
+    "saveDownloadedJson": true,
+    "importDownloadedJson": true,
+    "xonstatSubmissionUrl": "http://localhost:8080/stats/submit",
+    "jsondir": "./ql-match-jsons/",
+    "logLevel": "INFO",
+    "servers": [
+      "MPogoda:94.244.60.171:27960/stats",
+      "ganaldo:77.82.85.174:27960/stats",
+      "ganaldo:77.82.85.174:27961/stats",
+      "ganaldo:77.82.85.174:27962/stats",
+      "teh1337:104.197.142.106:27960/stats"
+    ],
+    "calculateGlicko": true,
+    "trackDuelEvents":  false 
+  },
+  "httpd": {
+    "port": 8081,
+    "ip": "127.0.0.1"
+  },
+  "webadmin": {
+    "enabled": true,
+    "logLevel": "INFO",
+    "urlprefix": "/panel1"
+  },
+  "webapi": {
+    "enabled": true,
+    "logLevel": "INFO",
+    "database": "postgres://xonstat:xonstat@localhost:5432/xonstatdb",
+    "aggregatePanelPorts": [],
+    "urlprefix": "/api"
+  },
+  "webui": {
+    "enabled":  true,
+    "steamAuth": {
+      "returnURL": "https://qlstats.local/account/auth/steam/return",
+      "realm": "https://qlstats.local/",
+      "apiKey": "$$steam-api-key",
+      "profile": true
+    },
+    "siteName": "qlstats.net",
+    "sessionSecret": "23hk23h5kjh21gpsv98721hyx12bxyvz902jafdp",
+    "postLogoutUrl": "https://qlstats.local/account/logout",
+    "urlprefix": "/account"
+  }
+}}

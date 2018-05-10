@@ -1,0 +1,32 @@
+{
+  "feeder": {
+    "enabled": false,
+    "saveDownloadedJson": true,
+    "importDownloadedJson": true,
+    "jsondir": "./ql-match-jsons/",
+    "logLevel": "INFO",
+    "servers": [],
+    "xonstatSubmissionUrl": "http://localhost:8080/stats/submit",
+    "calculateGlicko": true
+  },
+  "httpd": {
+    "ip": "127.0.0.1",
+    "port": 8088
+  },
+  "webadmin": {
+    "enabled": false,
+    "logLevel": "INFO"
+  },
+  "webapi": {
+    "enabled": true,
+    "urlprefix": "/api",
+    "logLevel": "INFO",
+    "database": "postgres://xonstat:$$password@localhost/xonstatdb",
+    "aggregatePanelPorts": [
+      8081,
+      8082,
+      8083,
+      8084
+    ]
+  }
+}

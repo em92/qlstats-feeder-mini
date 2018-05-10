@@ -86,7 +86,7 @@ function main() {
   if (_config.feeder.enabled !== false)
     startFeeder();
 
-  if (_config.webadmin.enabled || _config.webapi.enabled)
+  if (_config.webadmin.enabled || _config.webapi.enabled || _config.webui.enabled)
     startHttpd();
   return null;
 }
@@ -192,6 +192,8 @@ function upgradeConfigVersion() {
 
   if (!_config.webui)
     _config.webui = { enabled: false, urlprefix: "/account" };
+  if (_config.webui.enabled === undefined)
+    _config.webui.enabled = _config.webadmin.enabled && _config.webui.steamAuth && _config.webui.steamAuth.apiKey;
 
   if (!_config.feeder.xonstatSubmissionUrl) {
     var port = _config.feeder.xonstatPort;
@@ -273,7 +275,13 @@ function startHttpd() {
     var webadmin = require("./modules/webadmin");
     webadmin.init(_config, app, callbacks);
   }
-  
+
+  if (_config.webui.enabled) {
+    _logger.info("starting webui");
+    var webui = require("./modules/webui");
+    webui.init(_config, app, callbacks);
+  }
+
   // WebAPI is always started for internal APIs, public APIs can be disabled through the config file
   _logger.info("starting webapi");
   var webapi = require("./modules/webapi");
