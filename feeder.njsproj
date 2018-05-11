@@ -77,6 +77,9 @@ sample-data\combined_stats_duel.json
     <Content Include="views\header.ejs" />
     <Content Include="views\login.ejs" />
     <Content Include="views\privacy_policy.ejs" />
+    <Content Include="views\privacy_policy_text.ejs">
+      <SubType>Code</SubType>
+    </Content>
   </ItemGroup>
   <ItemGroup>
     <Folder Include="htdocs" />

@@ -71,37 +71,39 @@ function initSteamAuthPages(express, app) {
   app.get(prefix + "/auth/steam",
     passport.authenticate("steam", { failureRedirect: prefix + "/login" }),
     function (req, res) {
-      //res.redirect("/");
+      // will never be executed due to automatic redirect
     });
 
   app.get(prefix + "/auth/steam/return",
     passport.authenticate("steam", { failureRedirect: prefix + "/login" }),
     function (req, res) {
-      //res.redirect(prefix + "");
+      // "/my" is a paster web page that shows the "webui" web pages in an iframe, if the user is logged in.
       res.redirect("/my");
     });
 
-  app.get(prefix + "", ensureAuthenticated, renderAccountPage);
+  app.get(prefix + "", ensureAuthenticated, function(req, res) { renderAccountPage(req, res, ""); });
 
   app.post(prefix + "", ensureAuthenticated, function (req, res) {
-    saveUserSettings(req)
-      .then(function () {
-        res.redirect(prefix + "");
-      })
+    // store posted user preferences
+    saveUserSettings(req, res)
+      .then(function(msg) { renderAccountPage(req, res, msg); })    
       .done();
   });
+
   app.get(prefix + "/logout", function (req, res) {
-    if (req.user) {
+    // log out, close the iframe and send the user back to the site's start page
+    if (req.user) 
       req.logout();
-      res.redirect(_config.webui.postLogoutUrl);
-    } else {
-      res.send("<html><head><script>window.parent.location.replace('/');</script></head></html>");
-    }
+    res.send("<html><head><script>window.parent.location.replace('/');</script></head></html>");
   });
+
   app.get(prefix + "/user",
+    // API function used by paster web pages to get access to the steam user information
     function(req, res) {
       res.json(req.user || {});
     });
+
+  app.get(prefix + "/privacy_policy", function(req, res) { res.render("privacy_policy"); });
 }
 
 function ensureAuthenticated(req, res, next) {
@@ -109,15 +111,17 @@ function ensureAuthenticated(req, res, next) {
   res.redirect(_config.webui.urlprefix + '/login');
 }
 
-function renderAccountPage(req, res) {
+function renderAccountPage(req, res, msg) {
   loadUserSettings(req)
     .then(function (player) {
-      res.render("account", { user: req.user, conf: _config.webui, saved: false, player: player });
+      res.render("account", { user: req.user, conf: _config.webui, saved: false, player: player, errorMsg: msg });
     })
     .done();
 }
 
 function loadUserSettings(req) {
+  if (!req.user || !req.user.id)
+    return Q({});
   return utils.dbConnect(_config.webapi.database)
     .then(function (cli) {
       return Q()
@@ -132,27 +136,45 @@ function loadUserSettings(req) {
     });
 }
 
-function saveUserSettings(req) {
-  var set = "";
-  if (["1", "2", "3"].indexOf(req.body.matchHistory) >= 0)
-    set += ",privacy_match_hist=" + req.body.matchHistory;
-
-  if (set == "")
-    return Q(true);
-
-  set = set.substring(1);
+function saveUserSettings(req, res) {
 
   return utils.dbConnect(_config.webapi.database)
     .then(function (cli) {
       return Q()
         .then(function () {
+          if (req.body.action === "register")
+            return registerPlayer(req, res, cli);
+
+          var set = "";
+          if (["1", "2", "3"].indexOf(req.body.matchHistory) >= 0)
+            set += ",privacy_match_hist=" + req.body.matchHistory;
+          if (set === "")
+            return Q();
+          set = set.substring(1);
+
           var data = [req.user.id];
-          return Q.ninvoke(cli, "query", "update players set " + set + " where player_id=(select player_id from hashkeys where hashkey=$1)", data);
+          return Q.ninvoke(cli, "query", "update players set " + set + " where player_id=(select player_id from hashkeys where hashkey=$1)", data)
+            .then(function (status) { return undefined; });
         })
         .finally(function () { cli.release(); });
     });
 }
 
+function registerPlayer(req, res, cli) {
+  var msg = "";
+  if (req.body.policy !== "1")
+    msg += "<li>You did not accept the privacy policy</li>";
+  if (req.body.age !== "1")
+    msg += "<li>You did not confirm that you are 16 years or older</li>";
+  if (msg) {
+    msg = '<div style="background-color: darkred; color:white"><ul>' + msg + '</ul></div>';
+    return msg;
+  }
+
+  return Q.ninvoke(cli, "query", "insert into players (nick,stripped_nick) values ($1, $2) returning player_id", [ req.user.displayName, req.user.displayName ])
+    .then(function (result) { Q.ninvoke(cli, "query", "insert into hashkeys (hashkey, player_id) values ($1, $2)", [req.user.id, result.rows[0].player_id]) })
+    .then(function () { return ""; });
+}
 
 /**
  * Deletes the player with the given steam-id, including his aliases and ratings and ranks.

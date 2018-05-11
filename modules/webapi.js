@@ -73,18 +73,22 @@ function init(config, app, feeder) {
 
   // Public API methods
 
-  app.get(prefix + "/jsons", function(req, res) {
-    Q(queryJson(req))
-      .then(function(obj) { res.json(obj); })
-      .catch(function(err) { res.json({ ok: false, msg: "internal error: " + err, stacktrace: err.stack }); })
-      .finally(function() { res.end(); });
-  });
+  if (false) {
+    // API to access raw match data has been disabled for GDPR compliance
 
-  app.get(prefix + "/jsons/:date/:file.json(.gz)?", function(req, res) {
-    Q(getJson(req, res))
-      .catch(function(err) { res.json({ ok: false, msg: "internal error: " + err, stacktrace: err.stack }); })
-      .finally(function() { res.end(); });
-  });
+    app.get(prefix + "/jsons", function(req, res) {
+      Q(queryJson(req))
+        .then(function(obj) { res.json(obj); })
+        .catch(function(err) { res.json({ ok: false, msg: "internal error: " + err, stacktrace: err.stack }); })
+        .finally(function() { res.end(); });
+    });
+
+    app.get(prefix + "/jsons/:date/:file.json(.gz)?", function(req, res) {
+      Q(getJson(req, res))
+        .catch(function(err) { res.json({ ok: false, msg: "internal error: " + err, stacktrace: err.stack }); })
+        .finally(function() { res.end(); });
+    });
+  }
 
   app.get(prefix + "/server/skillrating", function(req, res) {
     Q(getServerSkillrating(req))

@@ -2,29 +2,48 @@
 
 <!--<h1>Hello, <%= user.displayName %></h1>-->
 <!--Your Steam-ID is: <%= user.id; %> <br>-->
-
 <%if (!player.player_id) { %>
-  <h1>Welcome!</h1>
-  <p>Your Steam-ID is not registered with yet and we don't have any data about you.<br>
-    If you want to register, please read and accept the following privacy statement:</p>
+<h1>Welcome!</h1>
+<p><b style="color:red">Your Steam-ID is not registered yet.</b> qlstats has no data about you.</p>
+<p><span style="color:lightgreen">If you want to register</span>, please read and accept the following privacy policy:</p>
 
-<% } else { %>
-<a href='/player/'<%=user.id%>' target="_parent">My Stats</a>
+<%- errorMsg -%>
+
+<%- include("privacy_policy_text"); %>
 
 <form method="post">
-<h2>Privacy Settings</h2>
-<input type="radio" name="matchHistory" value="3" <%= player.privacy_match_hist == 3 ? "checked" : "" %>><span class="opt-out">Not tracked:</span> No ratings, no stats. NOTE: server owners may deny you access to ranked servers
-<br><input type="radio" name="matchHistory" value="1" <%= player.privacy_match_hist == 1 ? "checked" : "" %>><span class="opt-in-private">Private:</span> Your ratings and aliases are accessible, your match history is private
-<br><input type="radio" name="matchHistory" value="2" <%= player.privacy_match_hist == 2 ? "checked" : "" %>><span class="opt-in-public">Public:</span> Everyone can see your ratings and match history
-<br>
-<br>
-<button type="submit">Save Settings</button>
-<% if (saved) { %>
-<br>Settings have been saved
-<% } %>
+  <div style="margin-top:2em">
+    <h2>Register</h2>
+    <input type="hidden" name="action" value="register" />
+    <input type="checkbox" name="policy" value="1"/>I have read and accept the privacy policy<br />
+    <input type="checkbox" name="age" value="1"/>I am 16 years or older<br />
+    <br/>
+    <input type="submit" value="Sign me up!" style="background-color:darkgreen;color:white;padding:4px 20px 4px 20px"/>
+  </div>
+</form>
+
+<% } else { %>
+<a href="/player/<%=player.player_id%>" target="_parent">My Stats</a>
+| <a href="privacy_policy">Privacy Policy</a>
+
+<form method="post">
+  <h2>Privacy Settings</h2>
+  <% if (player.privacy_match_hist <= 0) { %>
+  <p>NOTE: You have not set a preference yet. Until May 24th you will be treated as public, after that you are no longer tracked.</p>
+  <% } %>
+  <input type="radio" name="matchHistory" value="3" <%= player.privacy_match_hist == 3 ? "checked" : "" %>><span class="opt-out">Not tracked:</span> Don't record new data and don't provide rating information.
+  <br><input type="radio" name="matchHistory" value="1" <%= player.privacy_match_hist == 1 ? "checked" : "" %>><span class="opt-in-private">Private:</span> Your ratings and aliases are accessible, your match history is private
+  <br><input type="radio" name="matchHistory" value="2" <%= player.privacy_match_hist == 2 ? "checked" : "" %>><span class="opt-in-public">Public:</span> Everyone can see your ratings and match history
+  <p>
+    <input type="checkbox" name="locate" value="1" <%= player.privacy_locate == 1 ? "checked" : "" %>>Allow other players to see on which server I am currently playing ("Now Playing")
+  </p>
+  <br>
+  <button type="submit">Save Settings</button>
+  <% if (saved) { %>
+  <br>Settings have been saved
+  <% } %>
 </form>
 <% } %>
 
-<%- include("privacy_policy"); %>
 
 <%- include("footer"); %>
