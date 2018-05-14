@@ -1,12 +1,11 @@
 ﻿<%- include("header"); %>
+<style>
+  body { padding: 15px }
+</style>
 
-<% if (!user) { %>
-  <h1><%= conf.siteName %> Sign-in</h1>
-  To change your personal settings, <%= conf.siteName %> needs to know your Steam-ID.
-  <br>The next step will send you to a Steam page where you can grant access to that information.
-  <p><a href="<%=conf.urlprefix%>/auth/steam"><img src="<%=conf.urlprefix%>/steam-signin.png" alt="Sign in through Steam"></a></p>
-<% } else { %>
-  <h2>Hello, <%= user.displayName %>. - <a href='logout'>Logout</a></h2>
-<% } %>
+<h1><a href="/"><%= conf.siteName %></a> Sign-in</h1>
+To create a <%= conf.siteName %> account or change your personal settings, we needs to know your Steam-ID.
+<br>The next step will send you to a Steam Sign-In page, which will give us this information.
+<p><a href="<%=conf.urlprefix%>/auth/steam"><img src="<%=conf.urlprefix%>/steam-signin.png" alt="Sign in through Steam"></a></p>
 
 <%- include("footer"); %>

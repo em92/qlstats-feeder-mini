@@ -20,7 +20,7 @@ function dbConnect(conn) {
   var defConnect = Q.defer();
   pg.connect(conn, function (err, cli, release) {
     if (err)
-      defConnect.reject(new Error(err));
+      defConnect.reject(new Error("failed to connect to postgreSQL: " + err));
     else {
       cli.release = release;
       defConnect.resolve(cli);

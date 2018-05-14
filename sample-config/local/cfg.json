@@ -40,7 +40,7 @@
       "apiKey": "$$steam-api-key",
       "profile": true
     },
-    "siteName": "qlstats.net",
+    "siteName": "qlstats.local",
     "sessionSecret": "23hk23h5kjh21gpsv98721hyx12bxyvz902jafdp",
     "postLogoutUrl": "https://qlstats.local/account/logout",
     "urlprefix": "/account"

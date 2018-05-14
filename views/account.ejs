@@ -1,49 +1,47 @@
-﻿<%- include("header"); %>
+﻿<%- include("header"); -%>
 
 <!--<h1>Hello, <%= user.displayName %></h1>-->
 <!--Your Steam-ID is: <%= user.id; %> <br>-->
-<%if (!player.player_id) { %>
-<h1>Welcome!</h1>
-<p><b style="color:red">Your Steam-ID is not registered yet.</b> qlstats has no data about you.</p>
-<p><span style="color:lightgreen">If you want to register</span>, please read and accept the following privacy policy:</p>
-
-<%- errorMsg -%>
-
-<%- include("privacy_policy_text"); %>
-
-<form method="post">
-  <div style="margin-top:2em">
-    <h2>Register</h2>
-    <input type="hidden" name="action" value="register" />
-    <input type="checkbox" name="policy" value="1"/>I have read and accept the privacy policy<br />
-    <input type="checkbox" name="age" value="1"/>I am 16 years or older<br />
-    <br/>
-    <input type="submit" value="Sign me up!" style="background-color:darkgreen;color:white;padding:4px 20px 4px 20px"/>
+  
+<% if (errorMsg) { %>
+  <div style="background-color: darkred; color:white; padding: 4px 20px 4px 20px; margin-top:10px; margin-bottom:10px">
+    <%- errorMsg -%>
   </div>
-</form>
+<% } %>
 
+<%if (!player.player_id) { %>
+  <%- include("account_register"); -%>
 <% } else { %>
 <a href="/player/<%=player.player_id%>" target="_parent">My Stats</a>
 | <a href="privacy_policy">Privacy Policy</a>
 
+<h2>Privacy Settings</h2>
+<% if (player.privacy_match_hist <= 0) { %>
+<p>NOTE: You have not set a preference yet. Until May 24th you will be treated as public, after that you are no longer tracked.</p>
+<% } %>
 <form method="post">
-  <h2>Privacy Settings</h2>
-  <% if (player.privacy_match_hist <= 0) { %>
-  <p>NOTE: You have not set a preference yet. Until May 24th you will be treated as public, after that you are no longer tracked.</p>
-  <% } %>
   <input type="radio" name="matchHistory" value="3" <%= player.privacy_match_hist == 3 ? "checked" : "" %>><span class="opt-out">Not tracked:</span> Don't record new data and don't provide rating information.
   <br><input type="radio" name="matchHistory" value="1" <%= player.privacy_match_hist == 1 ? "checked" : "" %>><span class="opt-in-private">Private:</span> Your ratings and aliases are accessible, your match history is private
   <br><input type="radio" name="matchHistory" value="2" <%= player.privacy_match_hist == 2 ? "checked" : "" %>><span class="opt-in-public">Public:</span> Everyone can see your ratings and match history
   <p>
     <input type="checkbox" name="locate" value="1" <%= player.privacy_locate == 1 ? "checked" : "" %>>Allow other players to see on which server I am currently playing ("Now Playing")
   </p>
-  <br>
-  <button type="submit">Save Settings</button>
-  <% if (saved) { %>
-  <br>Settings have been saved
-  <% } %>
+  <button type="submit" name="action" value="update" class="button">Save Settings</button>
 </form>
+
+<h2>Delete account</h2>
+When you delete your account, qlstats will not allow you to sign-up again for 2 months to prevent abusive reset of ratings.
+<br/>For this purpose qlstats will keep your Steam-ID and the deletion date on record for said amount of time. All other information will be erased immediately.
+<br />The matches you participated in will be updated so that you show up as an Untracked Player.
+<br/>
+<form method="post">
+  <p>
+  <input type="checkbox" name="confirm" value="1"/>Confirm account deletion
+  </p>
+  <button type="submit" name="action" value="delete" class="button" style="background-color:darkred;color:white">Delete my account</button>
+</form>
+
 <% } %>
 
 
-<%- include("footer"); %>
+<%- include("footer"); -%>

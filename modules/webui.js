@@ -99,7 +99,9 @@ function initSteamAuthPages(express, app) {
 
   app.get(prefix + "/user",
     // API function used by paster web pages to get access to the steam user information
-    function(req, res) {
+    function (req, res) {
+      if (req.user)
+        req.user.strippedNick = strippedNick(req.user.displayName);
       res.json(req.user || {});
     });
 
@@ -145,6 +147,9 @@ function saveUserSettings(req, res) {
           if (req.body.action === "register")
             return registerPlayer(req, res, cli);
 
+          if (req.body.action === "delete")
+            return deletePlayer(req, res, cli);
+
           var set = "";
           if (["1", "2", "3"].indexOf(req.body.matchHistory) >= 0)
             set += ",privacy_match_hist=" + req.body.matchHistory;
@@ -154,7 +159,7 @@ function saveUserSettings(req, res) {
 
           var data = [req.user.id];
           return Q.ninvoke(cli, "query", "update players set " + set + " where player_id=(select player_id from hashkeys where hashkey=$1)", data)
-            .then(function (status) { return undefined; });
+            .then(function (status) { return "Your settings have been saved"; });
         })
         .finally(function () { cli.release(); });
     });
@@ -166,14 +171,35 @@ function registerPlayer(req, res, cli) {
     msg += "<li>You did not accept the privacy policy</li>";
   if (req.body.age !== "1")
     msg += "<li>You did not confirm that you are 16 years or older</li>";
-  if (msg) {
-    msg = '<div style="background-color: darkred; color:white"><ul>' + msg + '</ul></div>';
+  if (msg)
     return msg;
-  }
 
-  return Q.ninvoke(cli, "query", "insert into players (nick,stripped_nick) values ($1, $2) returning player_id", [ req.user.displayName, req.user.displayName ])
+  return Q.ninvoke(cli, "query", "insert into players (nick,stripped_nick) values ($1, $2) returning player_id", [ req.user.displayName, strippedNick(req.user.displayName) ])
     .then(function (result) { Q.ninvoke(cli, "query", "insert into hashkeys (hashkey, player_id) values ($1, $2)", [req.user.id, result.rows[0].player_id]) })
     .then(function () { return ""; });
+}
+
+function deletePlayer(req, res, cli) {
+  if (!req.body.confirm)
+    return "You didn't select the confirmation to delete your account";
+  return deletePlayerBySteamId(cli, req.user.id)
+    .then(function () { return "Your account has been deleted"; });
+}
+
+/**
+ * Remove color coding from nicknames (^1Nic^7k => Nick)
+ * @param {any} nick
+ */
+function strippedNick(nick) {
+  var stripped = "";
+  var i, c;
+  for (i = 0; i < nick.length; i++) {
+    if (nick[i] === "^")
+      i++;
+    else
+      stripped += nick[i];
+  }
+  return stripped;
 }
 
 /**
@@ -208,6 +234,6 @@ function deletePlayerByInternalId(cli, playerId) {
     .then(function () { return Q.ninvoke(cli, "query", "delete from player_elos where player_id=$1", [playerId]); })
     .then(function () { return Q.ninvoke(cli, "query", "delete from player_ranks where player_id=$1", [playerId]); })
     .then(function () { return Q.ninvoke(cli, "query", "delete from player_ranks_history where player_id=$1", [playerId]); })
-    .then(function () { return Q.ninvoke(cli, "query", "delete from hashkeys where player_id=$1", [playerId]); })
+    .then(function () { return Q.ninvoke(cli, "query", "update hashkeys set active_ind=false, player_id=-1, delete_dt=now() where player_id=$1", [playerId]); })
     .then(function () { return Q.ninvoke(cli, "query", "delete from players where player_id=$1", [playerId]); });
 }

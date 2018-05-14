@@ -1080,5 +1080,9 @@ function postMatchReportToXonstat(addr, game, report) {
   return defer.promise;
 }
 
+function saveMatchReportInDatabase(report) {
+
+}
+
 main();
 //process.exit(0);
