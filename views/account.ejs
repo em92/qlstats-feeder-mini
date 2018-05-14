@@ -20,11 +20,11 @@
 <p>NOTE: You have not set a preference yet. Until May 24th you will be treated as public, after that you are no longer tracked.</p>
 <% } %>
 <form method="post">
-  <input type="radio" name="matchHistory" value="3" <%= player.privacy_match_hist == 3 ? "checked" : "" %>><span class="opt-out">Not tracked:</span> Don't record new data and don't provide rating information.
+  <input type="radio" name="matchHistory" value="3" <%= player.privacy_match_hist == 0 || player.privacy_match_hist == 3 ? "checked" : "" %>><span class="opt-out">Not tracked:</span> Don't record new data and don't provide rating information.
   <br><input type="radio" name="matchHistory" value="1" <%= player.privacy_match_hist == 1 ? "checked" : "" %>><span class="opt-in-private">Private:</span> Your ratings and aliases are accessible, your match history is private
   <br><input type="radio" name="matchHistory" value="2" <%= player.privacy_match_hist == 2 ? "checked" : "" %>><span class="opt-in-public">Public:</span> Everyone can see your ratings and match history
   <p>
-    <input type="checkbox" name="locate" value="1" <%= player.privacy_locate == 1 ? "checked" : "" %>>Allow other players to see on which server I am currently playing ("Now Playing")
+    <input type="checkbox" name="locate" value="1" <%= player.privacy_nowplaying == 1 ? "checked" : "" %>>Show which server I'm currently playing on ("Now Playing")
   </p>
   <button type="submit" name="action" value="update" class="button">Save Settings</button>
 </form>

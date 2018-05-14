@@ -151,10 +151,8 @@ function saveUserSettings(req, res) {
             return deletePlayer(req, res, cli);
 
           var set = "";
-          if (["1", "2", "3"].indexOf(req.body.matchHistory) >= 0)
-            set += ",privacy_match_hist=" + req.body.matchHistory;
-          if (set === "")
-            return Q();
+          set += ",privacy_match_hist=" + (["1", "2", "3"].indexOf(req.body.matchHistory) >= 0 ? req.body.matchHistory : 1);
+          set += ",privacy_nowplaying=" + (req.body.locate === "1");
           set = set.substring(1);
 
           var data = [req.user.id];

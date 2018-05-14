@@ -394,7 +394,10 @@ function getProsNowPlaying(req, res) {
         var player1, player2;
         Object.keys(serverInfo.p).forEach(function(steamid) {
           var p = serverInfo.p[steamid];
-          var r = (ratings[steamid] || {})[gt] || { r:0, region: 0 };
+          var r = ratings[steamid] || {};
+          if (!r.np) // player does not allow locating him ("now playing")
+            return;
+          r = r[gt] || { r:0, region: 0 };
           if (p.team != 3 && !p.quit && (!region || r.region == region)) {
             var player = { steamid: steamid, name: p.name, rating: r.r, server: gameAddr };
             if (!player1)
@@ -633,7 +636,16 @@ function getSkillRatings() {
   return _getPlayerSkillratingsCache.updatePromise = utils.dbConnect(_config.webapi.database)
     .then(function(cli) {
       return Q
-        .ninvoke(cli, "query", { name: "serverskill", text: "select hashkey, game_type_cd, g2_r, g2_rd, region, b_r, b_rd from hashkeys h inner join player_elos e on e.player_id=h.player_id inner join players p on p.player_id=e.player_id where e.g2_games >= 5 or e.b_games >=5" })
+        .ninvoke(cli, "query", {
+          name: "serverskill",
+          text:
+            "select hashkey, game_type_cd, g2_r, g2_rd, region, b_r, b_rd, privacy_nowplaying " +
+            "from hashkeys h " +
+            "inner join player_elos e on e.player_id=h.player_id " +
+            "inner join players p on p.player_id=e.player_id " +
+            "where (e.g2_games >= 5 or e.b_games >= 5) " +
+            "and p.privacy_match_hist <> 3"
+        })
         .then(function(result) {
           _getPlayerSkillratingsCache.data = mapSkillInfo(result.rows);
           _getPlayerSkillratingsCache.timestamp = Date.now();
@@ -650,7 +662,7 @@ function getSkillRatings() {
     rows.forEach(function(row) {
       var player = info[row.hashkey];
       if (!player)
-        info[row.hashkey] = player = {};
+        info[row.hashkey] = player = { np: row.privacy_nowplaying };
       player[row.game_type_cd] = {
         r: Math.round(row.g2_r), rd: Math.round(row.g2_rd),
         b_r:  Math.round(row.b_r), b_rd: Math.round(row.b_rd),

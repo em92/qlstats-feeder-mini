@@ -24,7 +24,8 @@ var
   ERR_FACTORY_OR_SETTINGS = 8,
   ERR_UNSUPPORTED_GAME_TYPE = 9,
   ERR_UNRATED_SERVER = 10,
-  ERR_UNRATED_GAME = 11;
+  ERR_UNRATED_GAME = 11,
+  ERR_UNTRACKED_PLAYERS = 12;
 
 var rateEachSingleMatch = true;
 var _config;
@@ -206,11 +207,12 @@ function loadPlayers(cli, steamIds) {
   var query = "select h.hashkey, p.player_id, p.nick, p.active_ind, pe.g2_r, pe.g2_rd, pe.g2_dt, pe.g2_games, pe.b_r, pe.b_rd, pe.b_dt, pe.b_games "
     + " from hashkeys h"
     + " inner join players p on p.player_id=h.player_id"
-    + " left outer join player_elos pe on pe.player_id=h.player_id and pe.game_type_cd=$1";
+    + " left outer join player_elos pe on pe.player_id=h.player_id and pe.game_type_cd=$1"
+    + " where p.privacy_match_hist<>3";
   var params = [gametype];
   
   if (steamIds) {
-    query += " where h.hashkey in ('-1'";
+    query += " and h.hashkey in ('-1'";
     steamIds.forEach(function(steamId, i) {
       query += ",$" + (i + 2);
       params.push(steamId);
@@ -277,7 +279,6 @@ function reprocessMatch(cli, matchId, date, gameId) {
   var subfolders = [];
   for (var i = 0; i < 3; i++)
     subfolders.push(getDateFolder(date, deltas[i]));
-  subfolders.push("omega/");
 
   var file = null;
   for (var i = 0; i < subfolders.length; i++) {
@@ -419,11 +420,14 @@ function extractDataFromGameObject(game) {
   // aggregate total time, damage and score of player during a match (could have been switching teams)
   var playerData = {};
   var botmatch = false;
+  var untrackedPlayers = false;
   var timeRed = 0, timeBlue = 0, isTeamGame, roundsRed, roundsBlue;
   aggregateTimeAndScorePerPlayer();
 
   if (botmatch)
     return ERR_BOTMATCH;
+  if (untrackedPlayers)
+    return ERR_UNTRACKED_PLAYERS;
   if (game.roundCount) {
     if (roundsBlue != 0 && (roundsRed / roundsBlue > strategy.maxTeamTimeDiff || roundsBlue / roundsRed > strategy.maxTeamTimeDiff))
       return ERR_TEAMTIMEDIFF;    
@@ -439,7 +443,8 @@ function extractDataFromGameObject(game) {
   function aggregateTimeAndScorePerPlayer() {
     game.playerStats.forEach(function(p) {
       botmatch |= p.STEAM_ID == "0";
-      if (p.WARMUP || botmatch) // p.ABORTED must be counted for team switchers
+      untrackedPlayers |= !playersBySteamId[p.STEAM_ID];
+      if (p.WARMUP || botmatch || untrackedPlayers) // p.ABORTED must be counted for team switchers
         return;
 
       var pd = playerData[p.STEAM_ID];
