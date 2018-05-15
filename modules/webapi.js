@@ -1,12 +1,9 @@
 ﻿var
-  fs = require("graceful-fs"),
-  pg = require("pg"),
   log4js = require("log4js"),
   request = require("request"),
   gsq = require("game-server-query"),
   Q = require("q"),
   dns = require("dns"),
-  events = require("events"),
   gr = require("./gamerating"),
   utils = require("./utils");
 
@@ -60,8 +57,9 @@ function init(config, app, feeder) {
       .catch(function (err) { res.json({ ok: false, msg: "internal error: " + err, stacktrace: err.stack }); })
       .finally(function () { res.end(); });
   });
-  
-  app.get(prefix + "/qtv/:addr/stream", function (req, res) {
+
+  // this URL is served directly off the various server panels so that a qtv client can get the event stream
+  app.get(_config.webadmin.urlprefix + "/qtv/:addr/stream", function (req, res) {
     Q(getQtvEventStream(req, res))
       .then(function (obj) { res.json(obj); })
       .catch(function (err) { res.json({ ok: false, msg: "internal error: " + err, stacktrace: err.stack }); })
@@ -334,7 +332,7 @@ function getServerStatusdump(req) {
   addrs.forEach(function(addr) {
     var conn = conns[addr];
     if (!conn.connected) return;
-    info[addr] = { gp: conn.gamePort, gt: conn.gameType, f: conn.factory, p: conn.players, api: _config.httpd.port };
+    info[addr] = { gp: conn.gamePort, gt: conn.gameType, f: conn.factory, p: conn.players, api: _config.webadmin.urlprefix };
   });
   return info;
 }
@@ -395,7 +393,7 @@ function getProsNowPlaying(req, res) {
         Object.keys(serverInfo.p).forEach(function(steamid) {
           var p = serverInfo.p[steamid];
           var r = ratings[steamid] || {};
-          if (!r.np) // player does not allow locating him ("now playing")
+          if (!r.np) // player does not allow locating ("privacy_nowplaying")
             return;
           r = r[gt] || { r:0, region: 0 };
           if (p.team != 3 && !p.quit && (!region || r.region == region)) {
@@ -443,8 +441,8 @@ function getQtvEventStreamUrl(req, res) {
       var portMap = data[1];
       addr = data[2];
       var zmqAddr = portMap[addr] || addr;
-      var api = status[zmqAddr].api;
-      return { ok: true, streamUrl: req.protocol + "://" + req.hostname + ":" + api + "/qtv/" + zmqAddr + "/stream" };
+      var panelApiUrlPrefix = status[zmqAddr].api;
+      return { ok: true, streamUrl: req.protocol + "://" + req.hostname + panelApiUrlPrefix + "/qtv/" + zmqAddr + "/stream" };
     });
 }
 
