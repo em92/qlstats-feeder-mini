@@ -252,7 +252,7 @@ function locatePlayer(req, res) {
 
   var tasks = [];
   _config.webapi.aggregatePanelPorts.forEach(function(port) {
-    tasks.push(getJsonFromPort(port, "/player/" + steamid + "/locate"));
+    tasks.push(getJsonFromPort(port, _config.webapi.urlprefix + "/player/" + steamid + "/locate"));
   });
   return Q
     .allSettled(tasks)
