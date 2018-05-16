@@ -71,7 +71,7 @@ function init(config, app, feeder) {
 
   // Public API methods
 
-  if (false) {
+  if (_config.webapi.allowJsonDownload) {
     // API to access raw match data has been disabled for GDPR compliance
 
     app.get(prefix + "/jsons", function(req, res) {

@@ -211,7 +211,7 @@ function loadPlayers(cli, steamIds) {
   var params = [gametype];
   
   if (steamIds) {
-    query += " and h.hashkey in ('-1'";
+    query += " where h.hashkey in ('-1'";
     steamIds.forEach(function(steamId, i) {
       query += ",$" + (i + 2);
       params.push(steamId);
@@ -342,7 +342,12 @@ function processGame(cli, gameId, game) {
     || game.matchStats.INSTAGIB;
 
   var playerRanking = result;
+  playerRanking.sort(function (a, b) {
+    // this hack is needed to ensure we process players in the same order as submission.py so that we know the right "anonymous player" ID
+    return game.steamIdSubmissionOrder.indexOf(a.steamId) - game.steamIdSubmissionOrder.indexOf(b.steamId)
+  });
   var players = [];
+
   for (var i = 0; i < playerRanking.length; i++) {
     var r1 = playerRanking[i];
     var p1 = playersBySteamId[r1.id];
@@ -379,13 +384,11 @@ function processGame(cli, gameId, game) {
     .then(function() { return isFunMod });
 
   function savePlayerGameRatingChange(players) {
+    var anonymousCount = 0;
     return players.reduce(function(chain, p) {
       return chain.then(function() {
         return getPlayerId(cli, p)
           .then(function(pid) {
-            //if (gameId == 863)
-            //  _logger.trace(p.name + ": r=" + p.rating.getRating() + ", rd=" + p.rating.getRd());
-
             if (!updateDatabase)
               return Q();
 
@@ -393,8 +396,11 @@ function processGame(cli, gameId, game) {
             var val = [gameId, pid, p.score, rating.__oldR, rating.__oldRd, rating.getRating() - rating.__oldR, rating.getRd() - rating.__oldRd];
             return Q.ninvoke(cli, "query", { name: "pgs_upd", text: "update player_game_stats set g2_score=$3, g2_old_r=$4, g2_old_rd=$5, g2_delta_r=$6, g2_delta_rd=$7 where game_id=$1 and player_id=$2", values: val })
               .then(function(result) {
-                if (result.rowCount == 0)
-                  _logger.warn("player_game_stats not found: gid=" + gameId + ", pid=" + pid);
+                if (result.rowCount == 0) {
+                  _logger.warn("player_game_stats not found: gid=" + gameId + ", pid=" + pid + ", steamId=" + p.id);
+                  val[1] = -(++anonymousCount);
+                  return Q.ninvoke(cli, "query", { name: "pgs_upd", text: "update player_game_stats set g2_score=$3, g2_old_r=$4, g2_old_rd=$5, g2_delta_r=$6, g2_delta_rd=$7 where game_id=$1 and player_id=$2", values: val });
+                }
                 return Q();
               });
           });
@@ -529,7 +535,7 @@ function extractDataFromGameObject(game) {
 
       var rankingScore = calcPlayerPerformance(pd, game);
       if (rankingScore != NaN)
-        players.push({ id: pd.id, score: rankingScore, win: pd.win, team: pd.team });
+        players.push({ steamId: steamId, id: pd.id, score: rankingScore, win: pd.win, team: pd.team });
     }
     return players;
   }

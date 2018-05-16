@@ -75,6 +75,7 @@ sample-data\combined_stats_duel.json
     <Content Include="views\account.ejs" />
     <Content Include="views\account_deleted.ejs" />
     <Content Include="views\account_register.ejs" />
+    <Content Include="views\account_settings.ejs" />
     <Content Include="views\footer.ejs" />
     <Content Include="views\header.ejs" />
     <Content Include="views\login.ejs" />

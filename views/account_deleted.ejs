@@ -1,5 +1,5 @@
 <h1>Account deleted</h1>
-On <%= player.delete_dt.toLocaleDateString(undefined, { timeZone: 'UTC', year: 'numeric', month: '2-digit', day: '2-digit' }) %> you chose to delete your account.
-<br/>As you were informed back then, you won't be able to re-register for a total period of 60 days.
+You deleted your account on <%= player.delete_dt.toLocaleDateString(undefined, { timeZone: 'UTC', year: 'numeric', month: '2-digit', day: '2-digit' }) %> 
+and have to wait <%= conf.reregisterCooldownDays - player.days_since_delete %> more days before you can sign up again.
 <br/>This step is necessary to avoid abusive reset of ratings by repeated deleting + registering.
-<p><b>Sorry!</b></p>
+<p><b>Please come back later!</b></p>

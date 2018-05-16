@@ -81,13 +81,18 @@ function initSteamAuthPages(express, app) {
       res.redirect("/my");
     });
 
-  app.get(prefix + "", ensureAuthenticated, function(req, res) { renderAccountPage(req, res, ""); });
+  app.get(prefix + "", ensureAuthenticated, function(req, res) {
+    renderAccountPage(req, res, "")
+      .catch(function (err) { _logger.error(err); res.json({ ok: false, msg: "internal error: " + err, stacktrace: err.stack }); })
+      .finally(function () { res.end(); });
+  });
 
   app.post(prefix + "", ensureAuthenticated, function (req, res) {
     // store posted user preferences
     saveUserSettings(req, res)
-      .then(function(msg) { renderAccountPage(req, res, msg); })    
-      .done();
+      .then(function(msg) { return renderAccountPage(req, res, msg); })
+      .catch(function (err) { _logger.error(err); res.json({ ok: false, msg: "internal error: " + err, stacktrace: err.stack }); })
+      .finally(function () { res.end(); });
   });
 
   app.get(prefix + "/logout", function (req, res) {
@@ -105,7 +110,7 @@ function initSteamAuthPages(express, app) {
       res.json(req.user || {});
     });
 
-  app.get(prefix + "/privacy_policy", function(req, res) { res.render("privacy_policy"); });
+  app.get(prefix + "/privacy_policy", function (req, res) { res.render("privacy_policy", { conf: _config.webui }); });
 }
 
 function ensureAuthenticated(req, res, next) {
@@ -114,11 +119,8 @@ function ensureAuthenticated(req, res, next) {
 }
 
 function renderAccountPage(req, res, msg) {
-  loadUserSettings(req)
-    .then(function (player) {
-      res.render("account", { user: req.user, conf: _config.webui, saved: false, player: player, errorMsg: msg });
-    })
-    .done();
+  return loadUserSettings(req)
+    .then(function (player) { res.render("account", { user: req.user, conf: _config.webui, saved: false, player: player, errorMsg: msg }); });
 }
 
 function loadUserSettings(req) {
@@ -129,7 +131,7 @@ function loadUserSettings(req) {
       return Q()
         .then(function () {
           var data = [req.user.id];
-          return Q.ninvoke(cli, "query", "select h.active_ind as allow_tracking, h.delete_dt, p.* from hashkeys h left outer join players p on p.player_id=h.player_id where h.hashkey=$1", data);
+          return Q.ninvoke(cli, "query", "select h.active_ind as allow_tracking, h.delete_dt, date_part('day', timezone('utc',now())-h.delete_dt) as days_since_delete, p.* from hashkeys h left outer join players p on p.player_id=h.player_id where h.hashkey=$1", data);
         })
         .then(function (result) {
           return result.rows && result.rows.length > 0 ? result.rows[0] : {};
@@ -174,9 +176,22 @@ function registerPlayer(req, res, cli) {
   if (msg)
     return msg;
 
-  return Q.ninvoke(cli, "query", "insert into players (nick,stripped_nick) values ($1, $2) returning player_id", [ req.user.displayName, strippedNick(req.user.displayName) ])
-    .then(function (result) { Q.ninvoke(cli, "query", "insert into hashkeys (hashkey, player_id) values ($1, $2)", [req.user.id, result.rows[0].player_id]) })
-    .then(function () { return ""; });
+  return loadUserSettings(req)
+    .then(function (player) {
+      var chain = Q();
+
+      // handle re-registration of deleted players
+      if (player.hasOwnProperty("days_since_delete")) {
+        if (parseInt(player.days_since_delete) <= _config.webui.reregisterCooldownDays)
+          return Q("You must wait a little longer before you can sign-up again.");
+        chain = chain.then(function () { return Q.ninvoke(cli, "query", "delete from hashkeys where hashkey=$1", [req.user.id]) });
+      }
+
+      return chain
+        .then(function () { return Q.ninvoke(cli, "query", "insert into players (nick,stripped_nick) values ($1, $2) returning player_id", [req.user.displayName, strippedNick(req.user.displayName)]) })
+        .then(function (result) { return Q.ninvoke(cli, "query", "insert into hashkeys (hashkey, player_id) values ($1, $2)", [req.user.id, result.rows[0].player_id]); })
+        .then(function () { return ""; });
+      });
 }
 
 function deletePlayer(req, res, cli) {

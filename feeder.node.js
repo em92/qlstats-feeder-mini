@@ -213,6 +213,8 @@ function upgradeConfigVersion() {
     _config.webapi.urlprefix = "";
   if (!_config.webui.urlprefix)
     _config.webui.urlprefix = "";
+  if (!_config.webui.reregisterCooldownDays)
+    _config.webui.reregisterCooldownDays = 30;
 
   return JSON.stringify(_config) != oldConfig;
 }
@@ -938,6 +940,7 @@ function createXonstatMatchReport(gt, game) {
   exportMatchInformation(gt, game, report);
   
   var allWeapons = { gt: "GAUNTLET", mg: "MACHINEGUN", sg: "SHOTGUN", gl: "GRENADE", rl: "ROCKET", lg: "LIGHTNING", rg: "RAILGUN", pg: "PLASMA", bfg: "BFG", hmg: "HMG", cg: "CHAINGUN", ng: "NAILGUN", pm: "PROXMINE", gh: "OTHER_WEAPON" };
+  game.steamIdSubmissionOrder = [];
     
   if (isTeamGame(gt)) {
     var redWon = parseInt(game.matchStats.TSCORE0) > parseInt(game.matchStats.TSCORE1);
@@ -982,6 +985,7 @@ function createXonstatMatchReport(gt, game) {
       // redrover is not team-based gametype, but for some reason player is assigned to a team in match report
       if (gt != "rr" && (team || p.TEAM) && p.TEAM != team)
         continue;
+      game.steamIdSubmissionOrder.push(p.STEAM_ID);
       report.push("P " + p.STEAM_ID);
       report.push("n " + p.NAME);
       if (team)

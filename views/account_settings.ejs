@@ -1,0 +1,48 @@
+<a href="/player/<%=player.player_id%>" target="_parent">My Stats</a>
+| <a href="privacy_policy">Privacy Policy</a>
+
+<h2>Privacy Settings</h2>
+<% if (player.privacy_match_hist <= 0) { %>
+<p>NOTE: You have not set a preference yet. Until May 24th you will be treated as public, after that you are no longer tracked.</p>
+<% } %>
+<form method="post">
+  <input type="radio" name="matchHistory" value="3" <%= player.privacy_match_hist == 0 || player.privacy_match_hist == 3 ? "checked" : "" %>><span class="opt-out">Anonymous:</span> Ratings + cheat indicator only. No nicks/aliases/match history on record, no profile page, "Anonymous Player" in match results.
+  <br><input type="radio" name="matchHistory" value="1" <%= player.privacy_match_hist == 1 ? "checked" : "" %>><span class="opt-in-private">Private:</span> Your nick and ID in match results, aliases on your profile. No match history on your profile page.
+  <br><input type="radio" name="matchHistory" value="2" <%= player.privacy_match_hist == 2 ? "checked" : "" %>><span class="opt-in-public">Public:</span> Full match history and weapon stats on your profile page.
+  <p>
+    <input type="checkbox" name="locate" value="1" <%= player.privacy_nowplaying == 1 ? "checked" : "" %>>Show which server I'm currently playing on ("Now Playing")
+  </p>
+  <button type="submit" name="action" value="update" class="button">Save Settings</button>
+</form>
+
+
+<h2>Anonymize existing data</h2>
+<p>
+This will remove your ID and nick name from all existing match data replacing you with "Anonymous Player".
+<br/>It will clear your match history and your aliases.
+<br/>Your current ratings won't be affected by this.
+</p>
+
+<form method="post">
+  <p>
+  <input type="checkbox" name="confirm" value="1"/>Confirm anonymization
+  </p>
+  <button type="submit" name="action" value="anonymize" class="button" style="background-color:#c80;color:white">Anonymize existing data</button>
+</form>
+
+
+<h2>Delete account</h2>
+When you delete your account, qlstats will not allow you to sign-up again for 60 days to prevent abusive reset of ratings.
+<br/>For this purpose qlstats will keep your Steam-ID and the deletion date on record for said amount of time. All other information will be erased immediately.
+<br/>In all existing match results you will be replaced with "Anonymous Player".
+
+<p>In future match results you will show up as "Untracked Player" and since we can't rate you anymore, we can't rate the match, affecting all other players.
+  <br><b>Server owners may deny you joining their ranked servers</b>, if they want to make sure matches can get rated.
+</p>
+
+<form method="post">
+  <p>
+  <input type="checkbox" name="confirm" value="1"/>Confirm account deletion
+  </p>
+  <button type="submit" name="action" value="delete" class="button" style="background-color:darkred;color:white">Delete my account</button>
+</form>
