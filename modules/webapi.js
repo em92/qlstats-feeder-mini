@@ -641,8 +641,7 @@ function getSkillRatings() {
             "from hashkeys h " +
             "inner join player_elos e on e.player_id=h.player_id " +
             "inner join players p on p.player_id=e.player_id " +
-            "where (e.g2_games >= 5 or e.b_games >= 5) " +
-            "and p.privacy_match_hist <> 3"
+            "where (e.g2_games >= 5 or e.b_games >= 5) "
         })
         .then(function(result) {
           _getPlayerSkillratingsCache.data = mapSkillInfo(result.rows);
@@ -700,7 +699,7 @@ function getAggregatedServerStatusData() {
 
   // load status dump from a different admin panel port and aggregate the information
   function getStatusdumpFromPort(port) {
-    return getJsonFromPort(port, "/server/statusdump")
+    return getJsonFromPort(port, _config.webapi.urlprefix + "/server/statusdump")
       .then(function(info) {
         for (var key in info) {
           if (!info.hasOwnProperty(key)) continue;
