@@ -207,8 +207,7 @@ function loadPlayers(cli, steamIds) {
   var query = "select h.hashkey, p.player_id, p.nick, p.active_ind, pe.g2_r, pe.g2_rd, pe.g2_dt, pe.g2_games, pe.b_r, pe.b_rd, pe.b_dt, pe.b_games "
     + " from hashkeys h"
     + " inner join players p on p.player_id=h.player_id"
-    + " left outer join player_elos pe on pe.player_id=h.player_id and pe.game_type_cd=$1"
-    + " where p.privacy_match_hist<>3";
+    + " left outer join player_elos pe on pe.player_id=h.player_id and pe.game_type_cd=$1";
   var params = [gametype];
   
   if (steamIds) {

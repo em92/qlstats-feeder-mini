@@ -129,7 +129,7 @@ function loadUserSettings(req) {
       return Q()
         .then(function () {
           var data = [req.user.id];
-          return Q.ninvoke(cli, "query", "select * from players where player_id=(select player_id from hashkeys where hashkey=$1)", data);
+          return Q.ninvoke(cli, "query", "select h.active_ind as allow_tracking, h.delete_dt, p.* from hashkeys h left outer join players p on p.player_id=h.player_id where h.hashkey=$1", data);
         })
         .then(function (result) {
           return result.rows && result.rows.length > 0 ? result.rows[0] : {};
@@ -139,13 +139,15 @@ function loadUserSettings(req) {
 }
 
 function saveUserSettings(req, res) {
-
   return utils.dbConnect(_config.webapi.database)
     .then(function (cli) {
       return Q()
         .then(function () {
           if (req.body.action === "register")
             return registerPlayer(req, res, cli);
+
+          if (req.body.action === "anonymize")
+            return anonymizePlayer(req, res, cli);
 
           if (req.body.action === "delete")
             return deletePlayer(req, res, cli);
@@ -156,7 +158,7 @@ function saveUserSettings(req, res) {
           set = set.substring(1);
 
           var data = [req.user.id];
-          return Q.ninvoke(cli, "query", "update players set " + set + " where player_id=(select player_id from hashkeys where hashkey=$1)", data)
+          return Q.ninvoke(cli, "query", "update players set " + set + " where player_id=(select player_id from hashkeys where hashkey=$1 and player_id>2)", data)
             .then(function (status) { return "Your settings have been saved"; });
         })
         .finally(function () { cli.release(); });
@@ -180,13 +182,20 @@ function registerPlayer(req, res, cli) {
 function deletePlayer(req, res, cli) {
   if (!req.body.confirm)
     return "You didn't select the confirmation to delete your account";
-  return deletePlayerBySteamId(cli, req.user.id)
+  return deletePlayerBySteamId(cli, req.user.id, true)
     .then(function () { return "Your account has been deleted"; });
+}
+
+function anonymizePlayer(req, res, cli) {
+  if (!req.body.confirm)
+    return "You didn't select the confirmation to anonymize your existing data";
+  return deletePlayerBySteamId(cli, req.user.id, false)
+    .then(function () { return "Your existing data has been anonymized"; });
 }
 
 /**
  * Remove color coding from nicknames (^1Nic^7k => Nick)
- * @param {any} nick
+ * @param {string} nick
  */
 function strippedNick(nick) {
   var stripped = "";
@@ -201,27 +210,37 @@ function strippedNick(nick) {
 }
 
 /**
- * Deletes the player with the given steam-id, including his aliases and ratings and ranks.
- * Games and game stats are anonymized by replacing the deleted player with a "Deleted Player #" placeholder (negative player_id)  
- * @param {any} cli database client
- * @param {any} steamId Steam-ID of the player to be deleted
+ * Delete or anonymize the player with the given internal id, including his aliases and ranks. Ratings are kept when anonymizing.
+ * Games and game stats are anonymized by replacing the deleted player with a "Deleted Player #" placeholder (negative player_id).
+ * @param {any} cli - database client
+ * @param {string} steamId - Steam-ID of the player to be deleted
+ * @param {bool} deletePlayer - true to delete, false to anonymize
  */
-function deletePlayerBySteamId(cli, steamId) {
+function deletePlayerBySteamId(cli, steamId, deletePlayer) {
   return Q()
     .then(function () { return Q.ninvoke(cli, "query", "select player_id from hashkeys where hashkey=$1", [steamId]) })
     .then(function (result) {
-      return result.rowCount === 0 ? Q() : deletePlayerByInternalId(cli, result.rows[0].player_id);
+      return result.rowCount === 0 ? Q() : deletePlayerByInternalId(cli, result.rows[0].player_id, deletePlayer);
     });
 }
 
-function deletePlayerByInternalId(cli, playerId) {
+/**
+ * Delete or anonymize the player with the given internal id, including his aliases and ranks. Ratings are kept when anonymizing.
+ * Games and game stats are anonymized by replacing the deleted player with a "Deleted Player #" placeholder (negative player_id).
+ * @param {any} cli - database client
+ * @param {int} playerId - internal ID of the player to be deleted
+ * @param {bool} deletePlayer - true to delete, false to anonymize
+ */
+function deletePlayerByInternalId(cli, playerId, deletePlayer) {
+  if (!playerId || parseInt(playerId) <= 2)
+    return Q(); // special player IDs must not be deleted
   return Q()
     .then(function () { return Q.ninvoke(cli, "query", "select game_id, min(pid) as min_player_id from xonstat.games g, unnest(g.players) pid where players @> ARRAY[$1::int] group by 1", [playerId]) })
     .then(function (result) {
       return result.rows.reduce(function (chain, row) {
         var newId = row.min_player_id < 0 ? row.min_player_id - 1 : -1;
         var args = [row.game_id, playerId, newId];
-        var args4 = [row.game_id, playerId, newId, "Deleted Player " + (-newId)];
+        var args4 = [row.game_id, playerId, newId, "Anonymous Player " + (-newId)];
         return chain
           .then(function () { return Q.ninvoke(cli, "query", { name: "anon1", text: "update games set players=array_replace(players, $2, $3) where game_id=$1", values: args }); })
           .then(function () { return Q.ninvoke(cli, "query", { name: "anon2", text: "update player_game_stats set player_id=$3, nick=$4, stripped_nick=$4 where game_id=$1 and player_id=$2", values: args4 }); })
@@ -229,9 +248,14 @@ function deletePlayerByInternalId(cli, playerId) {
       }, Q());
     })
     .then(function () { return Q.ninvoke(cli, "query", "delete from player_nicks where player_id=$1", [playerId]); })
-    .then(function () { return Q.ninvoke(cli, "query", "delete from player_elos where player_id=$1", [playerId]); })
     .then(function () { return Q.ninvoke(cli, "query", "delete from player_ranks where player_id=$1", [playerId]); })
     .then(function () { return Q.ninvoke(cli, "query", "delete from player_ranks_history where player_id=$1", [playerId]); })
-    .then(function () { return Q.ninvoke(cli, "query", "update hashkeys set active_ind=false, player_id=-1, delete_dt=now() where player_id=$1", [playerId]); })
-    .then(function () { return Q.ninvoke(cli, "query", "delete from players where player_id=$1", [playerId]); });
+    .then(function () {
+      if (!deletePlayer)
+        return Q();
+      return Q()
+        .then(function () { return Q.ninvoke(cli, "query", "delete from player_elos where player_id=$1", [playerId]); })
+        .then(function () { return Q.ninvoke(cli, "query", "update hashkeys set active_ind=false, player_id=-1, delete_dt=timezone('utc',now()) where player_id=$1", [playerId]); })
+        .then(function () { return Q.ninvoke(cli, "query", "delete from players where player_id=$1", [playerId]); });
+      });
 }

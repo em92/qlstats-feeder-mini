@@ -19,7 +19,7 @@
     </NodeExeArguments>
     <StartWebBrowser>True</StartWebBrowser>
     <ScriptArguments>-c mycfg.json</ScriptArguments>
-    <Environment>foo=ql-match-jsons\2016-01\06\f84a663f-f448-4920-9622-e9a9b1a6e154.json.gz
+    <Environment>ql-match-jsons\a6558e8a-b1d4-4c69-acac-5cf3cf13c588.json.gz
 -f -u tdm
 sample-data\combined_stats_duel.json
  -g 19498 sample-data\combined_stats_ca.json</Environment>
@@ -73,6 +73,7 @@ sample-data\combined_stats_duel.json
     <Content Include="sample-data\player_switchteam.json" />
     <Content Include="sample-data\round_over.json" />
     <Content Include="views\account.ejs" />
+    <Content Include="views\account_deleted.ejs" />
     <Content Include="views\account_register.ejs" />
     <Content Include="views\footer.ejs" />
     <Content Include="views\header.ejs" />
