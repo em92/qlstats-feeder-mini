@@ -448,7 +448,7 @@ function extractDataFromGameObject(game) {
   function aggregateTimeAndScorePerPlayer() {
     game.playerStats.forEach(function(p) {
       botmatch |= p.STEAM_ID == "0";
-      untrackedPlayers |= !playersBySteamId[p.STEAM_ID];
+      untrackedPlayers |= !playersBySteamId[p.STEAM_ID] || playersBySteamId[p.STEAM_ID].pid <= 2;
       if (p.WARMUP || botmatch || untrackedPlayers) // p.ABORTED must be counted for team switchers
         return;
 
