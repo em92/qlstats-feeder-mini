@@ -3,9 +3,7 @@
   request = require("request"),
   gsq = require("game-server-query"),
   Q = require("q"),
-  dns = require("dns"),
-  gr = require("./gamerating"),
-  utils = require("./utils");
+  dns = require("dns");
 
 exports.init = init;
 

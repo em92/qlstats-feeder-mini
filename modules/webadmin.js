@@ -2,12 +2,7 @@
   bodyParser = require("body-parser"),
   fs = require("graceful-fs"),
   log4js = require("log4js"),
-  passport = require("passport"),
-  SteamStrategy = require("passport-steam").Strategy,
-  session = require("express-session"),
-  pg = require("pg"),
-  Q = require("q"),
-  utils = require("./utils");
+  Q = require("q");
 
 exports.init = init;
 
@@ -239,34 +234,5 @@ function updateServers(req) {
 
   _feeder.writeConfig();
 
-  if (!(_config.webapi.database)) {
-    return Q(result);
-  }
-  
-  return utils.dbConnect(_config.webapi.database)
-    .then(function(cli) {
-      return Q()
-        .then(function() {
-          if (serverIp && !serverPort && newIp && newIp != serverIp) {
-            var data = [serverIp, newIp, newIp ];
-            return Q.ninvoke(cli, "query", "update servers set ip_addr=$2, hashkey=$3 || substring(hashkey from ':\\d+$') where ip_addr=$1", data);
-          }
-          return Q();
-        })
-        .then(function() {
-          if (serverPort && (newPort || gamePort)) {
-            var data = [ serverIp + ":" + serverPort, (newIp || serverIp) + ":" + (newPort || serverPort), gamePort];
-            return Q.ninvoke(cli, "query", "update servers set hashkey=$2, port=$3 where hashkey=$1", data);
-          }
-          return Q();
-        })
-        .then(function() {
-          return Q(result);
-        })
-        .catch(function(err) {
-          result.msg += "DB update error: " + err;
-          return Q(result);
-        })
-        .finally(function() { cli.release(); });
-    });
+  return Q(result);
 }

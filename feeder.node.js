@@ -40,8 +40,7 @@ var
   express = require("express"),
   http = require("http"),
   StatsConnection = require("./modules/statsconn"),
-  semver = require("semver"),
-  utils = require("./modules/utils");
+  semver = require("semver");
 
 var IpPortPassRegex = /^(?:([^:]*):)?((?:[0-9]{1,3}\.){3}[0-9]{1,3}):([0-9]+)(?:\/(.*))?$/; // IP:port/pass
 
@@ -441,25 +440,7 @@ function connectToServerList(servers) {
     return true;
   }
   
-  // load associated game ports from database
   var ret = Q({});
-  if (_config.webapi.database) {
-    ret = ret.then(function() {
-      return utils.dbConnect(_config.webapi.database)
-        .then(function(cli) {
-          return Q
-            .ninvoke(cli, "query", "select hashkey, port from servers")
-            .then(function(result) {
-              var gamePorts = {};
-              result.rows.forEach(function(row) {
-                gamePorts[row.hashkey] = row.port;
-              });
-              return gamePorts;
-            })
-            .finally(function() { cli.release(); });
-        });
-    });
-  }
 
   // HACK: sometimes no connections can be established after the config was reloaded.
   // In this case terminate the process after some delay and have the wrapper shell script restart it again
