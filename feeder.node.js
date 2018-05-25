@@ -85,7 +85,7 @@ function main() {
   if (_config.feeder.enabled !== false)
     startFeeder();
 
-  if (_config.webadmin.enabled || _config.webapi.enabled || _config.webui.enabled)
+  if (_config.webadmin.enabled)
     startHttpd();
   return null;
 }
@@ -186,34 +186,14 @@ function upgradeConfigVersion() {
   if (!_config.webadmin.logLevel)
     _config.webadmin.logLevel = "INFO";
 
-  if (!_config.webapi)
-    _config.webapi = { enabled: false, logLevel: "INFO", database: "postgres://xonstat:xonstat@localhost/xonstatdb", urlprefix: "/api" };
-
-  if (!_config.webui)
-    _config.webui = { enabled: false, urlprefix: "/account" };
-  if (_config.webui.enabled === undefined)
-    _config.webui.enabled = _config.webadmin.enabled && _config.webui.steamAuth && _config.webui.steamAuth.apiKey;
-
   if (!_config.feeder.xonstatSubmissionUrl) {
     var port = _config.feeder.xonstatPort;
     delete _config.feeder.xonstatPort;
     _config.feeder.xonstatSubmissionUrl = "http://localhost:" + port + "/stats/submit";
   }
 
-  if (typeof (_config.feeder.calculateGlicko) == "undefined")
-    _config.feeder.calculateGlicko = true;
-
-  if (typeof (_config.webapi.aggregatePanelPorts) == "undefined")
-    _config.webapi.aggregatePanelPorts = [];
-
   if (!_config.webadmin.urlprefix)
     _config.webadmin.urlprefix = "";
-  if (!_config.webapi.urlprefix)
-    _config.webapi.urlprefix = "";
-  if (!_config.webui.urlprefix)
-    _config.webui.urlprefix = "";
-  if (!_config.webui.reregisterCooldownDays)
-    _config.webui.reregisterCooldownDays = 30;
 
   return JSON.stringify(_config) != oldConfig;
 }
@@ -275,12 +255,6 @@ function startHttpd() {
     _logger.info("starting webadmin");
     var webadmin = require("./modules/webadmin");
     webadmin.init(_config, app, callbacks);
-  }
-
-  if (_config.webui.enabled) {
-    _logger.info("starting webui");
-    var webui = require("./modules/webui");
-    webui.init(_config, app, callbacks);
   }
 
   app.listen(_config.httpd.port, _config.httpd.ip);
@@ -837,20 +811,6 @@ function processGameData(game) {
   }
 
   return postMatchReportToXonstat(addr, game, report)
-    .then(function(result) {
-      if (!_config.feeder.calculateGlicko)
-        return true;
-      if (!result.ok || !result.game_id) {
-        if (_gameId)
-          result = { game_id: _gameId } // this is for running a match data file through the debugger
-        else {
-          _logger.debug("game could not be rated: " + game.matchStats.MATCH_GUID);
-          return false;
-        }
-      }
-      var rating = require("./modules/gamerating");
-      return rating.rateSingleGame(result.game_id, game);
-    })
     .catch(function(err) {
       if (!_reloadErrorFiles)
         saveGameJson(game, true);
