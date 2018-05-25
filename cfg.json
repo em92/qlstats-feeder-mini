@@ -21,7 +21,7 @@
     "urlprefix": ""
   },
   "webapi": {
-    "enabled": true,
+    "enabled": false,
     "logLevel": "INFO",
     "aggregatePanelPorts": [],
     "urlprefix": ""

@@ -283,11 +283,6 @@ function startHttpd() {
     webui.init(_config, app, callbacks);
   }
 
-  // WebAPI is always started for internal APIs, public APIs can be disabled through the config file
-  _logger.info("starting webapi");
-  var webapi = require("./modules/webapi");
-  webapi.init(_config, app, callbacks);
-
   app.listen(_config.httpd.port, _config.httpd.ip);
 }
 
