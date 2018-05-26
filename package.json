@@ -13,18 +13,18 @@
     "url": "https://github.com/PredatH0r/XonStat.git"
   },
   "dependencies": {
-    "body-parser": ">= 1.14.1",
-    "events": ">= 1.1.0",
-    "express": ">= 4.13.3",
-    "graceful-fs": ">= 3.0.0",
-    "log4js": "^0.6.22",
-    "node-gyp": ">= 3.0.0",
+    "body-parser": "1.18.3",
+    "events": "2.0.0",
+    "express": "4.16.3",
+    "graceful-fs": "4.1.11",
+    "log4js": "0.6.38",
+    "node-gyp": "3.6.2",
     "q": "1.2.0",
-    "request": ">= 2.53.0",
-    "semver": "^4.3.2",
-    "zmq": ">=2.13.0"
+    "request": "2.87.0",
+    "semver": "4.3.6",
+    "zmq": "2.15.3"
   },
   "devDependencies": {
-    "es6-promise": "^4.0.5"
+    "es6-promise": "4.2.4"
   }
 }
