@@ -1,4 +1,7 @@
-﻿feeder.node.js
+This is fork of original [qlstats-feeder](https://github.com/PredatH0r/XonStat/tree/master/feeder). The main difference is reduced functionality
+(only feeder core functions) and saved match report submition in Xonstat format. Contents of original readme below.
+
+feeder.node.js
 ===
 
 The QLstats.net feeder is the glue between Quake Live game servers and the QLstats/xonstat website and database.
