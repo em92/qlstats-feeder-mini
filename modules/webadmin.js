@@ -41,22 +41,26 @@ function init(config, app, feeder) {
 
   app.get(prefix + "/api/servers", function (req, res) {
     _logger.info(req.connection.remoteAddress + ": " + prefix + "/api/servers ");
-    res.jsonp(getServerList());
-    res.end();
+    Q(getServerList())
+      .then(obj => res.jsonp(obj))
+      .catch(err => res.json({ ok: false, msg: "internal error: " + err }))
+      .finally(() => res.end());        
   });
 
   app.post(prefix + "/api/addserver", function (req, res) {
     _logger.info(req.connection.remoteAddress + ": " + prefix + "/api/addserver " + JSON.stringify(req.body));
-    res.json(addServer(req.body));
-    res.end();
+    Q(addServer(req.body))
+      .then(obj => res.json(obj))
+      .catch(err => res.json({ ok: false, msg: "internal error: " + err}))
+      .finally(() => res.end());
   });
 
   app.post(prefix + "/api/editserver", function (req, res) {
     _logger.info(req.connection.remoteAddress + ": " + prefix + "/api/editserver " + JSON.stringify(req.body));
     Q(updateServers(req.body))
-      .then(function(obj) { res.json(obj); })
-      .catch(function(err) { res.json({ ok: false, msg: "internal error: " + err }); })
-      .finally(function() { res.end(); });
+      .then(obj => res.json(obj))
+      .catch(err => res.json({ ok: false, msg: "internal error: " + err }))
+      .finally(() => res.end());
   });
 }
 

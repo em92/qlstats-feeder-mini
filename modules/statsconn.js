@@ -6,10 +6,10 @@ exports.setLogger = setLogger;
 
 
 var MonitorInterval = 1000; // interval for checking connection status
-var ConnectAttemptInterval = 60 * 1000; // try for 60 sec to establish a connection, then consider the server to be offline
+var ConnectAttemptInterval = 10 * 1000; // try for 60 sec to establish a connection, then consider the server to be offline
 var OfflineServerRetryInterval = 5 * 60 * 1000; // try to reconnect to offline servers after 5min
 var IdleReconnectInterval = 15 * 60 * 1000; // reconnect to idle servers after 15min (QL stops sending data at some point)
-var ReconnectRandomizedInterval = 30 * 1000; // randomly delay reconnection attempts by up to +/-15 seconds to avoid load spikes on the server
+var ReconnectRandomizedInterval = 10 * 1000; // randomly delay reconnection attempts by up to +/-5 seconds to avoid load spikes on the server
 var WrongPasswordInterval = 5 * 1000; // when connection is closed within this interval after connecting, it's probably due to wrong password
 
 var _logger = {};
@@ -21,6 +21,17 @@ function create(owner, ip, port, pass, onZmqMessageCallback, gamePort) {
 
 function setLogger(logger) {
   _logger = logger;
+}
+
+function safeFunction(func) {
+  // can't use a lambda here because that would not capture the "arguments"
+  return function () {
+    try {
+      return func.apply(this, arguments);
+    } catch (err) {
+      _logger.error(err);
+    }
+  };
 }
 
 function StatsConnection(owner, ip, port, pass, onZmqMessageCallback, gamePort) {
@@ -39,6 +50,7 @@ function StatsConnection(owner, ip, port, pass, onZmqMessageCallback, gamePort) 
   this.connected = false;
   this.disconnected = false;
   this.badPassword = false;
+  this.lastConnectAttemptFailed = false;
   this.lastMessageUtc = 0;
   this.connectUtc = 0;
   
@@ -60,7 +72,6 @@ function StatsConnection(owner, ip, port, pass, onZmqMessageCallback, gamePort) 
 
 StatsConnection.prototype.connect = function(isReconnect) {
   var self = this;
-  var failAttempt = 0;
 
   this.badPassword = false;
   this.disconnected = false;
@@ -81,66 +92,70 @@ StatsConnection.prototype.connect = function(isReconnect) {
   //_logger.debug(self.addr + ": trying to connect");
 
   this.sub.on("connect",
-    function() {
+    safeFunction(() => {
       self.connected = true;
       self.connectUtc = Date.now();
+      self.lastConnectAttemptFailed = false;
       if (isReconnect)
         _logger.debug(self.addr + ": reconnected successfully");
       else
         _logger.info(self.addr + ": connected successfully");
       self.resetIdleTimeout();
-    });
+    }));
 
   this.sub.on("connect_delay",
-    function() {
-      if (failAttempt++ === 3)
-        _logger.warn(self.addr + ": failed to connect, but will keep trying...");
+    safeFunction(() => {
       if (Date.now() - self.connectUtc >= ConnectAttemptInterval) {
+        if (self.lastConnectAttemptFailed) // avoid log spam
+          _logger.debug(self.addr + ": still failing to connect, but will keep trying...");
+        else
+          _logger.warn(self.addr + ": failed to connect, but will keep trying...");
         self.disconnect();
         self.startReconnectTimer();
+        self.lastConnectAttemptFailed = true;
       }
-    });
+    }));
 
-  this.sub.on("connect_retry",
-    function() {
-      self.connecting = true;
-      if (Date.now() - self.connectUtc >= ConnectAttemptInterval) {
-        self.disconnect();
-        self.startReconnectTimer();
-      } else if (failAttempt % 40 === 0)
-        _logger.debug(self.addr + ": retrying to connect");
-    });
+  //this.sub.on("connect_retry",
+  //  safeFunction(() => {
+  //    self.connecting = true;
+  //    if (Date.now() - self.connectUtc >= ConnectAttemptInterval) {
+  //      self.disconnect();
+  //      self.startReconnectTimer();
+  //    } else if (self.failAttempt % 40 === 0)
+  //      _logger.debug(self.addr + ": retrying to connect");
+  //  }));
 
   this.sub.on("message",
-    function(data) {
+    safeFunction(data => {
       self.lastMessageUtc = Date.now();
       self.onZmqMessageCallback(self, data);
       self.resetIdleTimeout();
-    });
+    }));
 
   this.sub.on("disconnect",
-    function() {
+    safeFunction(() => {
+      if (self.disconnected)
+        return;
       if (Date.now() - self.connectUtc <= WrongPasswordInterval) {
-        _logger.warn(self.addr + ": disconnected (probably wrong password)");
-        self.disconnect();
+        // when the password is wrong, we first get a "connect" event and then immediately after a "disconnect"
+        _logger.info(self.addr + ": disconnected (probably wrong password)");
         self.badPassword = true;
-        self.startReconnectTimer();
       } else {
         _logger.warn(self.addr + ": disconnected");
-        failAttempt = 0;
-        self.connectUtc = Date.now();
-        self.connecting = true;
+        self.badPassword = false;
       }
-      self.connected = false;
-    });
+      self.disconnect();
+      self.startReconnectTimer();
+    }));
 
   this.sub.on("monitor_error",
-    function() {
+    safeFunction(() => {
       if (!self.disconnected) {
         _logger.error(self.addr + ": error monitoring network status");
         setTimeout(function() { self.sub.monitor(MonitorInterval, 0); });
       }
-    });
+    }));
 
   this.sub.monitor(MonitorInterval, 0);
   this.sub.connect("tcp://" + this.addr);
@@ -149,18 +164,20 @@ StatsConnection.prototype.connect = function(isReconnect) {
 
 StatsConnection.prototype.startReconnectTimer = function() {
   var self = this;
-  this.reconnectTimer = setTimeout(function() { self.connect(); }, OfflineServerRetryInterval);
+  this.reconnectTimer = setTimeout(function () { self.connect(); },
+    OfflineServerRetryInterval + (Math.random() - 0.5) * ReconnectRandomizedInterval);
 };
 
 StatsConnection.prototype.resetIdleTimeout = function() {
   var self = this;
-  clearTimeout(this.idleTimeout);
+  if (this.idleTimeout)
+    clearTimeout(this.idleTimeout);
   this.idleTimeout = setTimeout(function() { self.onIdleTimeout(); },
     IdleReconnectInterval + (Math.random() - 0.5) * ReconnectRandomizedInterval);
 };
 
 StatsConnection.prototype.onIdleTimeout = function() {
-  _logger.debug(this.addr + ": reconnecting to idle server");
+  _logger.debug(this.addr + ": disconnecting from idle server");
   this.disconnect();
   this.connect(true);
 };
@@ -168,6 +185,7 @@ StatsConnection.prototype.onIdleTimeout = function() {
 StatsConnection.prototype.disconnect = function() {
   var err;
   if (!this.disconnected) {
+    this.disconnected = true;
     //try { this.sub.unsubscribe(""); } catch (err) { }
     try {
       this.sub.unmonitor();
@@ -189,7 +207,7 @@ StatsConnection.prototype.disconnect = function() {
   this.connected = false;
   this.connecting = false;
   this.lastMessageUtc = 0;
-  this.disconnected = true;
+  this.connectUtc = Date.now();
 
   if (this.idleTimeout)
     clearTimeout(this.idleTimeout);
