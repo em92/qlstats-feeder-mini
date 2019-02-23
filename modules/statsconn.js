@@ -151,10 +151,11 @@ StatsConnection.prototype.connect = function(isReconnect) {
 
   this.sub.on("monitor_error",
     safeFunction(() => {
-      if (!self.disconnected) {
-        _logger.error(self.addr + ": error monitoring network status");
-        setTimeout(function() { self.sub.monitor(MonitorInterval, 0); });
-      }
+      if (self.disconnected)
+        return;
+      _logger.error(self.addr + ": error monitoring network status");
+      self.disconnect();
+      self.connect();
     }));
 
   this.sub.monitor(MonitorInterval, 0);
