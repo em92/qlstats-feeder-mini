@@ -146,7 +146,7 @@ StatsConnection.prototype.connect = function(isReconnect) {
         self.badPassword = false;
       }
       self.disconnect();
-      self.startReconnectTimer();
+      self.connect();
     }));
 
   this.sub.on("monitor_error",
