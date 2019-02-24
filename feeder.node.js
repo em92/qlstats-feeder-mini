@@ -413,7 +413,7 @@ function connectToServerList(servers) {
 
   // HACK: sometimes no connections can be established after the config was reloaded.
   // In this case terminate the process after some delay and have the wrapper shell script restart it again
-  setTimeout(function () {
+  setInterval(function () {
     var connectedCount = 0;
     for (var key in _statsConnections) {
       if (_statsConnections.hasOwnProperty(key) && _statsConnections[key].connected)
@@ -423,7 +423,7 @@ function connectToServerList(servers) {
       _logger.error("No connections could be established within 5 sec. Terminating...");
       process.exit(1);
     }
-  }, 5000);
+  }, 15000);
 
   return ret
     .then(function (gamePorts) {

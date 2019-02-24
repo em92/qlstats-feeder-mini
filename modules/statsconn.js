@@ -141,12 +141,15 @@ StatsConnection.prototype.connect = function(isReconnect) {
         // when the password is wrong, we first get a "connect" event and then immediately after a "disconnect"
         _logger.info(self.addr + ": disconnected (probably wrong password)");
         self.badPassword = true;
+        self.disconnect();
+        self.startReconnectTimer();
       } else {
         _logger.warn(self.addr + ": disconnected");
         self.badPassword = false;
+        self.disconnect();
+        // defer reconnect so that the "monitor_error" caused by self.disconnect() gets processed first
+        setTimeout(() => self.connect(), 0); 
       }
-      self.disconnect();
-      self.connect();
     }));
 
   this.sub.on("monitor_error",
@@ -154,8 +157,7 @@ StatsConnection.prototype.connect = function(isReconnect) {
       if (self.disconnected)
         return;
       _logger.error(self.addr + ": error monitoring network status");
-      self.disconnect();
-      self.connect();
+      self.startReconnectTimer();
     }));
 
   this.sub.monitor(MonitorInterval, 0);
