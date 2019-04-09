@@ -420,7 +420,7 @@ function connectToServerList(servers) {
         ++connectedCount;
     }
     if (connectedCount === 0) {
-      _logger.error("No connections could be established within 5 sec. Terminating...");
+      _logger.error("No active server connections. Terminating...");
       process.exit(1);
     }
   }, 15000);

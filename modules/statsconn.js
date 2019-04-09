@@ -154,10 +154,11 @@ StatsConnection.prototype.connect = function(isReconnect) {
 
   this.sub.on("monitor_error",
     safeFunction(() => {
-      if (self.disconnected)
+      if (self.disconnected) // the "monitor_error" event may be a result of intentionally disconnecting
         return;
       _logger.error(self.addr + ": error monitoring network status");
-      self.startReconnectTimer();
+      self.disconnect();
+      self.startReconnectTimer(); // maybe should change this to an undelayed (but defered) self.connect()
     }));
 
   this.sub.monitor(MonitorInterval, 0);
@@ -195,12 +196,13 @@ StatsConnection.prototype.disconnect = function() {
     } catch (err) {
       _logger.error("Can't unmonitor " + this.addr + ": " + err);
     }
-    if (this.connected)
+    if (this.connected) {
       try {
         this.sub.disconnect("tcp://" + this.addr);
       } catch (err) {
         _logger.error("Can't disconnect from " + this.addr + ": " + err);
       }
+    }
     try {
       this.sub.close();
     } catch (err) {
