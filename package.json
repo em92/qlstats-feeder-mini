@@ -22,7 +22,7 @@
     "log4js": "0.6.38",
     "q": "1.2.0",
     "request": "2.87.0",
-    "semver": "4.3.6",
+    "semver": "5.7.2",
     "zeromq": "5.3.1"
   },
   "devDependencies": {
