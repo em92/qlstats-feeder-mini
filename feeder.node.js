@@ -33,7 +33,7 @@
 
 var
   fs = require("graceful-fs"),
-  request = require("request"),
+  request = require("@cypress/request"),
   log4js = require("log4js"),
   zlib = require("zlib"),
   Q = require("q"),
