@@ -416,7 +416,7 @@ function connectToServerList(servers) {
   setInterval(function () {
     var connectedCount = 0;
     for (var key in _statsConnections) {
-      if (_statsConnections.hasOwnProperty(key) && _statsConnections[key].connected)
+      if (_statsConnections.hasOwnProperty(key) && (_statsConnections[key].connected || _statsConnections[key].connecting))
         ++connectedCount;
     }
     if (connectedCount === 0) {
